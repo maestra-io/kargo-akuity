@@ -215,8 +215,10 @@ jobs:
         key: ${{ runner.os }}-tools-${{ hashFiles('hack/tools/go.mod', 'hack/tools.mk') }}
     - name: Git stuff
       # As of go 1.20, this seems to be necessary for invoking git commands
-      # within the container
-      run: git config --global --add safe.directory /__w/kargo/kargo
+      # within the container. Uses '*' (matching the lint-go job above) so
+      # the workflow works regardless of repo name -- upstream hardcodes
+      # /__w/kargo/kargo, which breaks on forks named differently.
+      run: git config --global --add safe.directory '*'
     - name: Run Codegen
       run: make codegen
     - name: Check nothing has changed
