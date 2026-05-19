@@ -134,6 +134,34 @@ func Test_gitPRMerger_run(t *testing.T) {
 			},
 		},
 		{
+			// GitHub 405 "Base branch was modified" is a transient race; the
+			// step must return a non-terminal error so retry.errorThreshold
+			// can fire. See akuity/kargo#5761.
+			name: "base branch was modified is retryable",
+			provider: &gitprovider.Fake{
+				MergePullRequestFn: func(
+					context.Context,
+					int64,
+					*gitprovider.MergePullRequestOpts,
+				) (*gitprovider.PullRequest, bool, error) {
+					return nil, false, errors.New(
+						"PUT https://api.github.com/repos/o/r/pulls/1/merge: " +
+							"405 Base branch was modified. " +
+							"Review and try the merge again. []",
+					)
+				},
+			},
+			config: builtin.GitMergePRConfig{
+				PRNumber: 42,
+			},
+			assertions: func(t *testing.T, res promotion.StepResult, err error) {
+				require.ErrorContains(t, err, "error merging pull request")
+				require.ErrorContains(t, err, "Base branch was modified")
+				require.False(t, promotion.IsTerminal(err))
+				require.Equal(t, kargoapi.PromotionStepStatusErrored, res.Status)
+			},
+		},
+		{
 			name: "PR not ready to merge with wait enabled",
 			provider: &gitprovider.Fake{
 				MergePullRequestFn: func(
