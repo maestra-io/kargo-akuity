@@ -3,6 +3,7 @@ package builtin
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/xeipuuv/gojsonschema"
@@ -127,6 +128,18 @@ func (g *gitPRMerger) run(
 			cfg.PRNumber,
 			&gitprovider.MergePullRequestOpts{MergeMethod: cfg.MergeMethod},
 		); err != nil {
+			// GitHub returns 405 "Base branch was modified" when its cached
+			// mergeable_commit_sha disagrees with the live base tip at merge
+			// time -- a TOCTOU between mergeability precomputation and merge
+			// execution that fires whenever concurrent merges land on the
+			// same base. It is transient: a subsequent reconciliation will
+			// pick up the fresh base and succeed. Return a non-terminal
+			// error so the orchestrator's retry.errorThreshold can fire.
+			// See akuity/kargo#5761.
+			if strings.Contains(err.Error(), "Base branch was modified") {
+				return promotion.StepResult{Status: kargoapi.PromotionStepStatusErrored},
+					fmt.Errorf("error merging pull request %d: %w", cfg.PRNumber, err)
+			}
 			// Only actual errors (auth, network, invalid PR, closed but not merged,
 			// etc.) reach here
 			return promotion.StepResult{Status: kargoapi.PromotionStepStatusFailed},
