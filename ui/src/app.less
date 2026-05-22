@@ -62,6 +62,82 @@ body, html {
     font-family: 'Poppins', sans-serif;
 }
 
+// LESS variables (@colorBgLayout, @colorBgBase, ...) are baked at build time
+// from the light-mode token in vite.config.mts, so they cannot flip with the
+// runtime theme. Override the most visible surfaces here when html.dark is set.
+html.dark {
+    body {
+        background-color: #141618;
+        color: rgba(255, 255, 255, 0.85);
+    }
+
+    // Main content area (.contentWrapper in main-layout.module.less)
+    [class*="_contentWrapper_"] {
+        background-color: #141618;
+    }
+
+    // Login page card (.box in login.module.less)
+    [class*="_box_"] {
+        background-color: #1f2226;
+        color: rgba(255, 255, 255, 0.85);
+    }
+
+    // Project list tiles (.tile in project-item.module.less)
+    [class*="_tile_"] {
+        background-color: #1f2226;
+        border-color: #303338 !important;
+    }
+
+    // Tailwind bg-white -- patch the most jarring offenders inline
+    // (search input, freight timeline strip, stacked-node ghost cards)
+    .bg-white {
+        background-color: #1f2226 !important;
+    }
+
+    // Gray surfaces used across freight cards, stage editors, image history
+    .bg-gray-50,
+    .bg-gray-100,
+    .bg-gray-200 {
+        background-color: #26292e !important;
+    }
+    .hover\:bg-gray-200:hover {
+        background-color: #303338 !important;
+    }
+    // Text-on-gray that becomes unreadable on dark surface
+    .text-gray-700 {
+        color: rgba(255, 255, 255, 0.78) !important;
+    }
+    .border-gray-100,
+    .border-gray-200,
+    .border-gray-300 {
+        border-color: #303338 !important;
+    }
+
+    // React Flow chrome (minimap bottom-right, controls bottom-left)
+    .react-flow__minimap {
+        background-color: #1f2226 !important;
+        border-color: #303338 !important;
+    }
+    .react-flow__minimap-mask {
+        fill: rgba(0, 0, 0, 0.35) !important;
+    }
+    .react-flow__controls,
+    .react-flow__controls-button {
+        background-color: #1f2226 !important;
+        border-color: #303338 !important;
+        color: rgba(255, 255, 255, 0.85) !important;
+        fill: rgba(255, 255, 255, 0.85) !important;
+    }
+    .react-flow__controls-button:hover {
+        background-color: #303338 !important;
+    }
+
+    // Drop overlay (drag-and-drop a promotion) -- was rgba(#fff, 0.9)
+    [class*="_dropOverlay_"] {
+        background: rgba(20, 22, 24, 0.85) !important;
+    }
+}
+
 .ant-btn {
     box-shadow: none !important;
 }
