@@ -17,6 +17,7 @@ import { useExtensionsContext } from '@ui/extensions/extensions-context';
 import { useAuthContext } from '@ui/features/auth/context/use-auth-context';
 import { isJWTDirty } from '@ui/features/auth/jwt-utils';
 import { KargoLogo } from '@ui/features/common/logo/logo';
+import { ThemeToggle } from '@ui/features/common/theme/theme-toggle';
 
 import * as styles from './main-layout.module.less';
 import { NavItem } from './nav-item/nav-item';
@@ -69,6 +70,7 @@ export const MainLayout = () => {
               </NavItem>
             </nav>
 
+            <ThemeToggle className={styles.themeToggle} />
             <Button
               className={styles.logout}
               onClick={logout}
