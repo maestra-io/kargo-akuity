@@ -215,8 +215,9 @@ jobs:
         key: ${{ runner.os }}-tools-${{ hashFiles('hack/tools/go.mod', 'hack/tools.mk') }}
     - name: Git stuff
       # As of go 1.20, this seems to be necessary for invoking git commands
-      # within the container
-      run: git config --global --add safe.directory /__w/kargo/kargo
+      # within the container. Use a wildcard (as in lint-go above) so the
+      # job works in any fork, not just the upstream akuity/kargo path.
+      run: git config --global --add safe.directory '*'
     - name: Run Codegen
       run: make codegen
     - name: Check nothing has changed
