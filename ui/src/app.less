@@ -81,6 +81,18 @@ html.dark {
         background-color: #1f2226;
         color: rgba(255, 255, 255, 0.85);
     }
+
+    // Project list tiles (.tile in project-item.module.less)
+    [class*="_tile_"] {
+        background-color: #1f2226;
+        border-color: #303338 !important;
+    }
+
+    // Tailwind bg-white -- patch the most jarring offenders inline
+    // (search input, freight timeline strip, stacked-node ghost cards)
+    .bg-white {
+        background-color: #1f2226 !important;
+    }
 }
 
 .ant-btn {
