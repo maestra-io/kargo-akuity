@@ -6,6 +6,8 @@ import { configureMonacoYaml } from 'monaco-yaml';
 import React, { FC, useEffect, useRef } from 'react';
 import yaml from 'yaml';
 
+import { useTheme } from '@ui/features/common/theme/use-theme';
+
 import styles from './yaml-editor.module.less';
 
 import './patch-yaml-editor';
@@ -29,6 +31,7 @@ export interface YamlEditorProps {
 
 const YamlEditor: FC<YamlEditorProps> = (props) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const { resolved: resolvedTheme } = useTheme();
   const {
     value,
     disabled,
@@ -102,10 +105,15 @@ const YamlEditor: FC<YamlEditorProps> = (props) => {
         <div>{label}</div>
       </Flex>
       <div
-        style={{ border: '1px solid #d9d9d9', height, overflow: 'hidden' }}
+        style={{
+          border: `1px solid ${resolvedTheme === 'dark' ? '#303338' : '#d9d9d9'}`,
+          height,
+          overflow: 'hidden'
+        }}
         className={className}
       >
         <Editor
+          theme={resolvedTheme === 'dark' ? 'vs-dark' : 'vs'}
           options={{
             readOnly: disabled,
             lineDecorationsWidth: 5,
