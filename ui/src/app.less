@@ -62,6 +62,27 @@ body, html {
     font-family: 'Poppins', sans-serif;
 }
 
+// LESS variables (@colorBgLayout, @colorBgBase, ...) are baked at build time
+// from the light-mode token in vite.config.mts, so they cannot flip with the
+// runtime theme. Override the most visible surfaces here when html.dark is set.
+html.dark {
+    body {
+        background-color: #141618;
+        color: rgba(255, 255, 255, 0.85);
+    }
+
+    // Main content area (.contentWrapper in main-layout.module.less)
+    [class*="_contentWrapper_"] {
+        background-color: #141618;
+    }
+
+    // Login page card (.box in login.module.less)
+    [class*="_box_"] {
+        background-color: #1f2226;
+        color: rgba(255, 255, 255, 0.85);
+    }
+}
+
 .ant-btn {
     box-shadow: none !important;
 }
