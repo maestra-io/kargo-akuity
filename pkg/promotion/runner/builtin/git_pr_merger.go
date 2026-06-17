@@ -128,20 +128,15 @@ func (g *gitPRMerger) run(
 			cfg.PRNumber,
 			&gitprovider.MergePullRequestOpts{MergeMethod: cfg.MergeMethod},
 		); err != nil {
-			// GitHub returns 405 "Base branch was modified" when its cached
-			// mergeable_commit_sha disagrees with the live base tip at merge
-			// time -- a TOCTOU between mergeability precomputation and merge
-			// execution that fires whenever concurrent merges land on the
-			// same base. It is transient: a subsequent reconciliation will
-			// pick up the fresh base and succeed. Return a non-terminal
-			// error so the orchestrator's retry.errorThreshold can fire.
-			// See akuity/kargo#5761.
-			if strings.Contains(err.Error(), "Base branch was modified") {
+			// Some merge failures are transient and a subsequent
+			// reconciliation will succeed once the upstream condition clears.
+			// Return a non-terminal error for those so the orchestrator's
+			// retry.errorThreshold can fire. Everything else (auth, network,
+			// invalid PR, closed but not merged, etc.) is terminal.
+			if isRetryableMergeError(err) {
 				return promotion.StepResult{Status: kargoapi.PromotionStepStatusErrored},
 					fmt.Errorf("error merging pull request %d: %w", cfg.PRNumber, err)
 			}
-			// Only actual errors (auth, network, invalid PR, closed but not merged,
-			// etc.) reach here
 			return promotion.StepResult{Status: kargoapi.PromotionStepStatusFailed},
 				&promotion.TerminalError{
 					Err: fmt.Errorf("error merging pull request %d: %w", cfg.PRNumber, err),
@@ -175,4 +170,45 @@ func (g *gitPRMerger) run(
 		Status: kargoapi.PromotionStepStatusSucceeded,
 		Output: map[string]any{stateKeyCommit: mergedPR.MergeCommitSHA},
 	}, nil
+}
+
+// transientMergeStatusFragments are substrings of the error strings that the
+// git providers (via their underlying clients, e.g. go-github) produce when a
+// merge fails for a transient, server-side reason. The clients format HTTP
+// errors as "<METHOD> <URL>: <STATUS> <message> ...", so the status code is
+// preceded by ": " and followed by a space -- matching ": 50x " avoids false
+// positives from URLs or PR numbers that happen to contain the same digits.
+var transientMergeStatusFragments = []string{
+	": 500 ", // Internal Server Error
+	": 502 ", // Bad Gateway
+	": 503 ", // Service Unavailable
+	": 504 ", // Gateway Timeout
+}
+
+// isRetryableMergeError reports whether an error returned by
+// gitprovider.MergePullRequest is transient and therefore worth retrying via a
+// non-terminal StepResult, letting the orchestrator's retry.errorThreshold
+// requeue the Promotion instead of failing it outright.
+//
+// Two classes of failure are treated as retryable:
+//
+//   - GitHub's 405 "Base branch was modified" -- a TOCTOU between mergeability
+//     precomputation and merge execution that fires whenever concurrent merges
+//     land on the same base branch (see akuity/kargo#5761).
+//   - Transient 5xx server errors (e.g. a 502 Bad Gateway from the GitHub API),
+//     which clear on a subsequent attempt.
+func isRetryableMergeError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "Base branch was modified") {
+		return true
+	}
+	for _, fragment := range transientMergeStatusFragments {
+		if strings.Contains(msg, fragment) {
+			return true
+		}
+	}
+	return false
 }
