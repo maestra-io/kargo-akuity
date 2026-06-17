@@ -162,6 +162,34 @@ func Test_gitPRMerger_run(t *testing.T) {
 			},
 		},
 		{
+			// A transient 5xx from the GitHub API (here a 502 Bad Gateway, as
+			// seen when a merge POST hits the API mid-incident) must return a
+			// non-terminal error so retry.errorThreshold can fire instead of
+			// leaving the PR open and the Promotion failed.
+			name: "transient 5xx server error is retryable",
+			provider: &gitprovider.Fake{
+				MergePullRequestFn: func(
+					context.Context,
+					int64,
+					*gitprovider.MergePullRequestOpts,
+				) (*gitprovider.PullRequest, bool, error) {
+					return nil, false, errors.New(
+						"PUT https://api.github.com/repos/o/r/pulls/3034/merge: " +
+							"502 Bad Gateway []",
+					)
+				},
+			},
+			config: builtin.GitMergePRConfig{
+				PRNumber: 3034,
+			},
+			assertions: func(t *testing.T, res promotion.StepResult, err error) {
+				require.ErrorContains(t, err, "error merging pull request")
+				require.ErrorContains(t, err, "502 Bad Gateway")
+				require.False(t, promotion.IsTerminal(err))
+				require.Equal(t, kargoapi.PromotionStepStatusErrored, res.Status)
+			},
+		},
+		{
 			name: "PR not ready to merge with wait enabled",
 			provider: &gitprovider.Fake{
 				MergePullRequestFn: func(
@@ -330,6 +358,63 @@ func Test_gitPRMerger_run(t *testing.T) {
 				cfg,
 			)
 			testCase.assertions(t, res, err)
+		})
+	}
+}
+
+func Test_isRetryableMergeError(t *testing.T) {
+	testCases := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{
+			name:     "nil error",
+			err:      nil,
+			expected: false,
+		},
+		{
+			name:     "base branch was modified (405)",
+			err:      errors.New("PUT .../merge: 405 Base branch was modified. []"),
+			expected: true,
+		},
+		{
+			name:     "bad gateway (502)",
+			err:      errors.New("PUT .../merge: 502 Bad Gateway []"),
+			expected: true,
+		},
+		{
+			name:     "service unavailable (503)",
+			err:      errors.New("PUT .../merge: 503 Service Unavailable []"),
+			expected: true,
+		},
+		{
+			name:     "gateway timeout (504)",
+			err:      errors.New("PUT .../merge: 504 Gateway Timeout []"),
+			expected: true,
+		},
+		{
+			name:     "auth failure is not retryable",
+			err:      errors.New("authentication failed"),
+			expected: false,
+		},
+		{
+			name:     "client error 422 is not retryable",
+			err:      errors.New("PUT .../merge: 422 Validation Failed []"),
+			expected: false,
+		},
+		{
+			// A status code appearing inside the URL or PR number must not be
+			// mistaken for an HTTP status -- the ": 50x " shape guards this.
+			name:     "status-like digits in URL do not match",
+			err:      errors.New("PUT https://api.github.com/repos/o/r/pulls/502/merge: 422 Validation Failed []"),
+			expected: false,
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, testCase.expected, isRetryableMergeError(testCase.err))
 		})
 	}
 }
