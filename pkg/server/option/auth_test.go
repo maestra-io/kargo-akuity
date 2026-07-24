@@ -196,6 +196,7 @@ func TestAuthenticate(t *testing.T) {
 		procedure       string
 		authInterceptor *authInterceptor
 		token           string
+		actAsEmail      string
 		assertions      func(ctx context.Context, err error)
 	}{
 		"exempt procedure": {
@@ -397,11 +398,41 @@ func TestAuthenticate(t *testing.T) {
 			token: testToken,
 			// We can't verify this token, so we check if Kubernetes recognizes it.
 			// In this case it does, so we expect user info containing the raw token
-			// to be bound to the context.
+			// to be bound to the context. With no act-as header, no email claim is
+			// recorded, so the action attributes to "unknown actor".
 			assertions: func(ctx context.Context, err error) {
 				require.NoError(t, err)
 				u, ok := user.InfoFromContext(ctx)
 				require.True(t, ok)
+				require.Nil(t, u.Claims)
+				require.Equal(t, testToken, u.BearerToken)
+			},
+		},
+		"act-as email honored for Kubernetes-token caller": {
+			procedure: testProcedure,
+			authInterceptor: &authInterceptor{
+				parseUnverifiedJWTFn: func(_ string, claims jwt.Claims) (*jwt.Token, []string, error) {
+					rc, ok := claims.(*jwt.RegisteredClaims)
+					require.True(t, ok)
+					rc.Issuer = "unrecognized-issuer"
+					return nil, nil, nil
+				},
+				verifyKubernetesTokenFn: func(context.Context, string) error {
+					return nil // Token is recognized by Kubernetes
+				},
+			},
+			token:      testToken,
+			actAsEmail: "tony@starkindustries.com",
+			// The caller declares an act-as email, so that email is recorded as a
+			// claim for attribution. Crucially, no "sub" claim is set, so
+			// authorization still flows through the caller's own bearer token.
+			assertions: func(ctx context.Context, err error) {
+				require.NoError(t, err)
+				u, ok := user.InfoFromContext(ctx)
+				require.True(t, ok)
+				require.False(t, u.IsAdmin)
+				require.Equal(t, "tony@starkindustries.com", u.Claims["email"])
+				require.NotContains(t, u.Claims, "sub")
 				require.Equal(t, testToken, u.BearerToken)
 			},
 		},
@@ -435,6 +466,9 @@ func TestAuthenticate(t *testing.T) {
 			header := http.Header{}
 			if ts.token != "" {
 				header.Set("Authorization", ts.token)
+			}
+			if ts.actAsEmail != "" {
+				header.Set(actAsEmailHeaderKey, ts.actAsEmail)
 			}
 			ctx, err := ts.authInterceptor.authenticate(
 				t.Context(),

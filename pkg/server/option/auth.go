@@ -32,6 +32,12 @@ import (
 
 const authHeaderKey = "Authorization"
 
+// actAsEmailHeaderKey is the request header through which a caller
+// authenticating with a Kubernetes token declares the human on whose behalf it
+// is acting, so that actions it performs are attributed to that person instead
+// of "unknown actor". It never influences authorization.
+const actAsEmailHeaderKey = "X-Kargo-Act-As-Email"
+
 var exemptProcedures = map[string]struct{}{
 	"/grpc.health.v1.Health/Check":                                   {},
 	"/grpc.health.v1.Health/Watch":                                   {},
@@ -469,12 +475,23 @@ func (a *authInterceptor) authenticate(
 	}
 	logger.Debug("token recognized by Kubernetes")
 
-	return user.ContextWithInfo(
-		ctx,
-		user.Info{
-			BearerToken: rawToken,
-		},
-	), nil
+	info := user.Info{BearerToken: rawToken}
+
+	// A caller authenticating with a Kubernetes token (e.g. an automation
+	// pipeline's ServiceAccount) has no inherent human identity, so its actions
+	// would otherwise be attributed to "unknown actor". If it declares, via the
+	// X-Kargo-Act-As-Email header, the human on whose behalf it is acting, we
+	// record that as the email claim so the action is attributed to that person
+	// instead. This influences ONLY attribution: authorization still relies on
+	// BearerToken (a SelfSubjectAccessReview as the caller's own identity)
+	// because we deliberately synthesize no "sub" claim — a "sub" claim is what
+	// would flip authorization to the ServiceAccount-mapping path.
+	if actAsEmail := header.Get(actAsEmailHeaderKey); actAsEmail != "" {
+		info.Claims = map[string]any{"email": actAsEmail}
+		logger.Debug("attributing action to act-as email", "actAsEmail", actAsEmail)
+	}
+
+	return user.ContextWithInfo(ctx, info), nil
 }
 
 var verifierMu = sync.Mutex{}
