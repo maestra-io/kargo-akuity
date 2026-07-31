@@ -2,12 +2,12 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/encoding/protojson"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -39,7 +39,11 @@ func TestRefreshResource(t *testing.T) {
 	testSets := map[string]struct {
 		kClient    client.WithWatch
 		req        *svcv1alpha1.RefreshResourceRequest
-		assertions func(*connect.Response[svcv1alpha1.RefreshResourceResponse], error)
+		assertions func(
+			client.Client,
+			*connect.Response[svcv1alpha1.RefreshResourceResponse],
+			error,
+		)
 	}{
 		"empty project": {
 			kClient: fake.NewClientBuilder().WithScheme(testScheme).Build(),
@@ -48,7 +52,11 @@ func TestRefreshResource(t *testing.T) {
 				Name:         "test",
 				ResourceType: RefreshResourceTypeWarehouse.String(),
 			},
-			assertions: func(res *connect.Response[svcv1alpha1.RefreshResourceResponse], err error) {
+			assertions: func(
+				_ client.Client,
+				res *connect.Response[svcv1alpha1.RefreshResourceResponse],
+				err error,
+			) {
 				require.Nil(t, res)
 				require.Error(t, err)
 				require.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
@@ -65,7 +73,11 @@ func TestRefreshResource(t *testing.T) {
 				Name:         "",
 				ResourceType: RefreshResourceTypeWarehouse.String(),
 			},
-			assertions: func(res *connect.Response[svcv1alpha1.RefreshResourceResponse], err error) {
+			assertions: func(
+				_ client.Client,
+				res *connect.Response[svcv1alpha1.RefreshResourceResponse],
+				err error,
+			) {
 				require.Nil(t, res)
 				require.Error(t, err)
 				require.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
@@ -82,7 +94,11 @@ func TestRefreshResource(t *testing.T) {
 				Name:         "test",
 				ResourceType: "",
 			},
-			assertions: func(res *connect.Response[svcv1alpha1.RefreshResourceResponse], err error) {
+			assertions: func(
+				_ client.Client,
+				res *connect.Response[svcv1alpha1.RefreshResourceResponse],
+				err error,
+			) {
 				require.Nil(t, res)
 				require.Error(t, err)
 				require.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
@@ -99,7 +115,11 @@ func TestRefreshResource(t *testing.T) {
 				Name:         "test",
 				ResourceType: "invalid",
 			},
-			assertions: func(res *connect.Response[svcv1alpha1.RefreshResourceResponse], err error) {
+			assertions: func(
+				_ client.Client,
+				res *connect.Response[svcv1alpha1.RefreshResourceResponse],
+				err error,
+			) {
 				require.Nil(t, res)
 				require.Error(t, err)
 				require.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
@@ -116,7 +136,11 @@ func TestRefreshResource(t *testing.T) {
 				Name:         "test",
 				ResourceType: RefreshResourceTypeWarehouse.String(),
 			},
-			assertions: func(res *connect.Response[svcv1alpha1.RefreshResourceResponse], err error) {
+			assertions: func(
+				_ client.Client,
+				res *connect.Response[svcv1alpha1.RefreshResourceResponse],
+				err error,
+			) {
 				require.Nil(t, res)
 				require.Error(t, err)
 				require.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
@@ -133,7 +157,11 @@ func TestRefreshResource(t *testing.T) {
 				Name:         "test",
 				ResourceType: RefreshResourceTypeWarehouse.String(),
 			},
-			assertions: func(res *connect.Response[svcv1alpha1.RefreshResourceResponse], err error) {
+			assertions: func(
+				_ client.Client,
+				res *connect.Response[svcv1alpha1.RefreshResourceResponse],
+				err error,
+			) {
 				require.Nil(t, res)
 				require.Error(t, err)
 				require.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
@@ -157,10 +185,19 @@ func TestRefreshResource(t *testing.T) {
 				Name:         "test",
 				ResourceType: RefreshResourceTypeWarehouse.String(),
 			},
-			assertions: func(res *connect.Response[svcv1alpha1.RefreshResourceResponse], err error) {
+			assertions: func(
+				kClient client.Client,
+				res *connect.Response[svcv1alpha1.RefreshResourceResponse],
+				err error,
+			) {
 				require.NoError(t, err)
+				requireEmptyRefreshResponse(t, res)
 				var wh kargoapi.Warehouse
-				require.NoError(t, json.Unmarshal(res.Msg.GetResource().Value, &wh))
+				require.NoError(t, kClient.Get(
+					context.Background(),
+					client.ObjectKey{Namespace: "kargo-demo", Name: "test"},
+					&wh,
+				))
 				annotation := wh.GetAnnotations()[kargoapi.AnnotationKeyRefresh]
 				refreshTime, err := time.Parse(time.RFC3339, annotation)
 				require.NoError(t, err)
@@ -187,10 +224,19 @@ func TestRefreshResource(t *testing.T) {
 				Name:         "test",
 				ResourceType: RefreshResourceTypeStage.String(),
 			},
-			assertions: func(res *connect.Response[svcv1alpha1.RefreshResourceResponse], err error) {
+			assertions: func(
+				kClient client.Client,
+				res *connect.Response[svcv1alpha1.RefreshResourceResponse],
+				err error,
+			) {
 				require.NoError(t, err)
+				requireEmptyRefreshResponse(t, res)
 				var st kargoapi.Stage
-				require.NoError(t, json.Unmarshal(res.Msg.GetResource().Value, &st))
+				require.NoError(t, kClient.Get(
+					context.Background(),
+					client.ObjectKey{Namespace: "kargo-demo", Name: "test"},
+					&st,
+				))
 				annotation := st.GetAnnotations()[kargoapi.AnnotationKeyRefresh]
 				refreshTime, err := time.Parse(time.RFC3339, annotation)
 				require.NoError(t, err)
@@ -227,10 +273,19 @@ func TestRefreshResource(t *testing.T) {
 				Name:         "test",
 				ResourceType: RefreshResourceTypeStage.String(),
 			},
-			assertions: func(res *connect.Response[svcv1alpha1.RefreshResourceResponse], err error) {
+			assertions: func(
+				kClient client.Client,
+				res *connect.Response[svcv1alpha1.RefreshResourceResponse],
+				err error,
+			) {
 				require.NoError(t, err)
+				requireEmptyRefreshResponse(t, res)
 				var p kargoapi.Promotion
-				require.NoError(t, json.Unmarshal(res.Msg.GetResource().Value, &p))
+				require.NoError(t, kClient.Get(
+					context.Background(),
+					client.ObjectKey{Namespace: "kargo-demo", Name: "promo-1"},
+					&p,
+				))
 				annotation := p.GetAnnotations()[kargoapi.AnnotationKeyRefresh]
 				refreshTime, err := time.Parse(time.RFC3339, annotation)
 				require.NoError(t, err)
@@ -238,7 +293,7 @@ func TestRefreshResource(t *testing.T) {
 				// Assume it doesn't take 3 seconds to run this unit test.
 				require.WithinDuration(t, time.Now(), refreshTime, 3*time.Second)
 				require.Equal(t, "kargo-demo", p.Namespace)
-				require.Equal(t, "test", p.Name)
+				require.Equal(t, "promo-1", p.Name)
 			},
 		},
 		"cluster config": {
@@ -256,10 +311,19 @@ func TestRefreshResource(t *testing.T) {
 				Name:         api.ClusterConfigName,
 				ResourceType: RefreshResourceTypeClusterConfig.String(),
 			},
-			assertions: func(res *connect.Response[svcv1alpha1.RefreshResourceResponse], err error) {
+			assertions: func(
+				kClient client.Client,
+				res *connect.Response[svcv1alpha1.RefreshResourceResponse],
+				err error,
+			) {
 				require.NoError(t, err)
+				requireEmptyRefreshResponse(t, res)
 				var cc kargoapi.ClusterConfig
-				require.NoError(t, json.Unmarshal(res.Msg.GetResource().Value, &cc))
+				require.NoError(t, kClient.Get(
+					context.Background(),
+					client.ObjectKey{Name: api.ClusterConfigName},
+					&cc,
+				))
 				annotation := cc.GetAnnotations()[kargoapi.AnnotationKeyRefresh]
 				refreshTime, err := time.Parse(time.RFC3339, annotation)
 				require.NoError(t, err)
@@ -285,10 +349,19 @@ func TestRefreshResource(t *testing.T) {
 				Project:      "kargo-demo",
 				ResourceType: RefreshResourceTypeProjectConfig.String(),
 			},
-			assertions: func(res *connect.Response[svcv1alpha1.RefreshResourceResponse], err error) {
+			assertions: func(
+				kClient client.Client,
+				res *connect.Response[svcv1alpha1.RefreshResourceResponse],
+				err error,
+			) {
 				require.NoError(t, err)
+				requireEmptyRefreshResponse(t, res)
 				var pc kargoapi.ProjectConfig
-				require.NoError(t, json.Unmarshal(res.Msg.GetResource().Value, &pc))
+				require.NoError(t, kClient.Get(
+					context.Background(),
+					client.ObjectKey{Namespace: "kargo-demo", Name: "kargo-demo"},
+					&pc,
+				))
 				annotation := pc.GetAnnotations()[kargoapi.AnnotationKeyRefresh]
 				refreshTime, err := time.Parse(time.RFC3339, annotation)
 				require.NoError(t, err)
@@ -321,7 +394,22 @@ func TestRefreshResource(t *testing.T) {
 			svr := &server{client: client}
 			svr.externalValidateProjectFn = validation.ValidateProject
 			res, err := svr.RefreshResource(ctx, connect.NewRequest(ts.req))
-			ts.assertions(res, err)
+			ts.assertions(ts.kClient, res, err)
 		})
 	}
+}
+
+// requireEmptyRefreshResponse asserts the response carries no `resource`, and
+// that it survives the JSON codec a browser negotiates. Populating `resource`
+// with an unresolvable anypb.Any made protojson fail for every call, which
+// connect reported to the caller as a 500 while the server logged success.
+func requireEmptyRefreshResponse(
+	t *testing.T,
+	res *connect.Response[svcv1alpha1.RefreshResourceResponse],
+) {
+	t.Helper()
+	require.NotNil(t, res)
+	require.Nil(t, res.Msg.GetResource())
+	_, err := protojson.Marshal(res.Msg)
+	require.NoError(t, err)
 }
