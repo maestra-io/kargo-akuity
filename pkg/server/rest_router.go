@@ -56,6 +56,10 @@ import (
 func (s *server) setupRESTRouter(ctx context.Context) *gin.Engine {
 	router := gin.Default()
 
+	// Metrics middleware. Registered first so it observes the status code and
+	// latency every other middleware ends up producing.
+	router.Use(ginMetricsMiddleware())
+
 	// Error handling middleware
 	router.Use(s.handleError)
 
