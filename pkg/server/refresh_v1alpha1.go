@@ -2,13 +2,11 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
 	"connectrpc.com/connect"
-	"google.golang.org/protobuf/types/known/anypb"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -105,7 +103,7 @@ func (s *server) RefreshResource(
 			)
 		}
 	}
-	return newRefreshResponse(o), nil
+	return newRefreshResponse(), nil
 }
 
 func (s *server) getClientObject(ctx context.Context, r *svcv1alpha1.RefreshResourceRequest) (client.Object, error) {
@@ -157,14 +155,27 @@ func (s *server) getObjectMeta(
 	return &o, nil
 }
 
-func newRefreshResponse(obj client.Object) *connect.Response[svcv1alpha1.RefreshResourceResponse] {
-	b, _ := json.Marshal(obj)
-	return connect.NewResponse(&svcv1alpha1.RefreshResourceResponse{
-		Resource: &anypb.Any{
-			TypeUrl: obj.GetObjectKind().GroupVersionKind().String(),
-			Value:   b,
-		},
-	})
+// newRefreshResponse returns an empty RefreshResourceResponse.
+//
+// The response's `resource` field used to carry the refreshed object as an
+// anypb.Any built from the object's GroupVersionKind and its JSON encoding.
+// Neither half is a valid protobuf Any: typed client-go objects carry an empty
+// TypeMeta, so the type URL rendered as "/, Kind=", and the value was JSON
+// rather than a marshaled message. protojson -- the codec a browser
+// negotiates -- must resolve a type URL before it can marshal, so it failed on
+// every single call:
+//
+//	proto: google.protobuf.Any: unable to resolve "/, Kind=": not found
+//
+// connect turns that marshal error into an HTTP 500 AFTER the interceptors
+// have already returned success, which made the failure invisible: the request
+// was logged as a finished unary call while the caller got an internal server
+// error. Binary-codec clients were unaffected, Any being opaque bytes to them.
+//
+// Nothing reads the field -- the UI uses only the mutation's success, and the
+// REST endpoint replacing this RPC answers a bare 200 -- so leave it unset.
+func newRefreshResponse() *connect.Response[svcv1alpha1.RefreshResourceResponse] {
+	return connect.NewResponse(&svcv1alpha1.RefreshResourceResponse{})
 }
 
 func validateRefreshResourceType(r *svcv1alpha1.RefreshResourceRequest) (RefreshResourceType, error) {
