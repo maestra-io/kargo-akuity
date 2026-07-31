@@ -234,7 +234,10 @@ func (s *server) Serve(ctx context.Context, l net.Listener) error {
 	}
 
 	// Instrument every request the mux serves: ConnectRPC, REST, the Dex proxy
-	// and the UI bundle. See pkg/server/metrics.go.
+	// and the UI bundle. Registration happens here rather than at package init
+	// so that only the component actually serving HTTP exports these metrics.
+	// See pkg/server/metrics.go.
+	registerMetrics()
 	handler := instrumentHandler(mux)
 
 	// Sometimes a permissive CORS policy is useful during local development.

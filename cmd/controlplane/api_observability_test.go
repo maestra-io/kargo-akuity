@@ -26,7 +26,7 @@ func TestStartMetricsServer(t *testing.T) {
 		require.Error(t, getErr)
 	})
 
-	t.Run("serves the API server's own metrics and the Go collectors", func(t *testing.T) {
+	t.Run("serves controller-runtime's registry", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
@@ -34,12 +34,12 @@ func TestStartMetricsServer(t *testing.T) {
 		startMetricsServer(ctx, addr, logger)
 
 		body := getEventually(t, fmt.Sprintf("http://%s/metrics", addr))
-		// Registered by pkg/server/metrics.go, which proves the API server's
-		// collectors land in the registry this endpoint serves. Only the gauge
-		// is asserted: a *Vec with no children yet emits nothing at all, and
-		// this process has served no requests. The Vecs are covered by
-		// pkg/server's tests.
-		require.Contains(t, body, "kargo_api_http_requests_in_flight")
+		// pkg/server registers its collectors when it starts serving, not at
+		// package init -- otherwise every subcommand of this single binary
+		// would export them (the controller Pods included). No server has been
+		// started here, so they must be absent; pkg/server's tests cover the
+		// registration itself.
+		require.NotContains(t, body, "kargo_api_http_")
 		// From controller-runtime's registry -- the reason the API server's
 		// goroutine count becomes visible at all. The client-go
 		// rest_client_* collectors live in the same registry but only emit
