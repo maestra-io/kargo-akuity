@@ -28,6 +28,9 @@ type apiOptions struct {
 	BindAddress string
 	Port        string
 
+	MetricsBindAddress string
+	PprofBindAddress   string
+
 	Logger *logging.Logger
 }
 
@@ -69,6 +72,11 @@ func (o *apiOptions) complete() {
 
 	o.BindAddress = os.GetEnv("BIND_ADDRESS", "0.0.0.0")
 	o.Port = os.GetEnv("PORT", "8080")
+
+	// Same env vars and same "0 means off" default as every other component
+	// (see controller.go), so an operator configures all of them alike.
+	o.MetricsBindAddress = os.GetEnv("METRICS_BIND_ADDRESS", metricsDisabled)
+	o.PprofBindAddress = os.GetEnv("PPROF_BIND_ADDRESS", "")
 
 	logLevel, logFormat := getLogVars()
 
@@ -153,6 +161,9 @@ func (o *apiOptions) run(ctx context.Context) error {
 		),
 		sender,
 	)
+	startMetricsServer(ctx, o.MetricsBindAddress, o.Logger)
+	startPprofServer(ctx, o.PprofBindAddress, o.Logger)
+
 	l, err := net.Listen("tcp", fmt.Sprintf("%s:%s", o.BindAddress, o.Port))
 	if err != nil {
 		return fmt.Errorf("error creating listener: %w", err)
