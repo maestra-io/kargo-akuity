@@ -4,11 +4,11 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 
 	"github.com/akuity/kargo/api/service/v1alpha1/svcv1alpha1connect"
@@ -62,8 +62,16 @@ const (
 // process and client-go (rest_client_*) collectors, so serving it gives one
 // endpoint with no duplicate collectors. cmd/controlplane/api.go serves it on
 // METRICS_BIND_ADDRESS.
+//
+// They are constructed here but registered in registerMetrics, called from
+// Serve -- NOT with promauto at package init. cmd/controlplane is a single
+// binary, so an init-time registration lands in every subcommand: the
+// controller and management-controller Pods would export
+// kargo_api_http_requests_in_flight too (permanently 0, since they serve no
+// HTTP through this package), which reads as a live API server to anything
+// checking for the metric's presence.
 var (
-	httpRequestsTotal = promauto.With(ctrlmetrics.Registry).NewCounterVec(
+	httpRequestsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: metricsNamespace,
 			Subsystem: metricsSubsystem,
@@ -78,7 +86,7 @@ var (
 	// histogram avoids multiplying bucket series by every status code, and
 	// latency questions ("is the API slow?") are asked per route, not per
 	// code.
-	httpRequestDuration = promauto.With(ctrlmetrics.Registry).NewHistogramVec(
+	httpRequestDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: metricsNamespace,
 			Subsystem: metricsSubsystem,
@@ -98,7 +106,7 @@ var (
 	// concurrency limit of its own, so a rising floor here -- with latency
 	// rising and CPU flat -- is what a starved server looks like from the
 	// outside.
-	httpRequestsInFlight = promauto.With(ctrlmetrics.Registry).NewGauge(
+	httpRequestsInFlight = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Namespace: metricsNamespace,
 			Subsystem: metricsSubsystem,
@@ -107,6 +115,20 @@ var (
 		},
 	)
 )
+
+var registerMetricsOnce sync.Once
+
+// registerMetrics adds this package's collectors to controller-runtime's
+// registry. Safe to call more than once; only the first call registers.
+func registerMetrics() {
+	registerMetricsOnce.Do(func() {
+		ctrlmetrics.Registry.MustRegister(
+			httpRequestsTotal,
+			httpRequestDuration,
+			httpRequestsInFlight,
+		)
+	})
+}
 
 // classifyRoute maps a request path onto a bounded `route` label value. It
 // returns routeSkip for requests that another middleware measures.

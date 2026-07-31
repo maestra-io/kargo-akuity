@@ -243,9 +243,12 @@ func (s *server) Serve(ctx context.Context, l net.Listener) error {
 	}
 
 	// Instrument every request the server handles: ConnectRPC, REST, the Dex
-	// proxy and the UI bundle. See pkg/server/metrics.go. This wraps the
-	// outermost handler, so request paths still carry the configured basePath;
-	// instrumentHandler trims it before classifying a route.
+	// proxy and the UI bundle. Registration happens here rather than at package
+	// init so that only the component actually serving HTTP exports these
+	// metrics. See pkg/server/metrics.go. This wraps the outermost handler, so
+	// request paths still carry the configured basePath; instrumentHandler
+	// trims it before classifying a route.
+	registerMetrics()
 	handler = instrumentHandler(handler, s.cfg.BasePath)
 
 	// Sometimes a permissive CORS policy is useful during local development.

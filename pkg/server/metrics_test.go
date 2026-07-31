@@ -4,11 +4,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
+	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
 func TestClassifyRoute(t *testing.T) {
@@ -261,4 +263,25 @@ func TestGinMetricsMiddleware(t *testing.T) {
 			)
 		})
 	}
+}
+
+func TestRegisterMetrics(t *testing.T) {
+	// Idempotent: Serve calls it, and a second call must not panic with
+	// duplicate registration.
+	registerMetrics()
+	registerMetrics()
+
+	families, err := ctrlmetrics.Registry.Gather()
+	require.NoError(t, err)
+
+	var names []string
+	for _, family := range families {
+		if strings.HasPrefix(family.GetName(), "kargo_api_") {
+			names = append(names, family.GetName())
+		}
+	}
+	// Only the gauge is asserted: a *Vec with no children emits no family at
+	// all, and which requests other tests in this package have recorded is not
+	// this test's business.
+	require.Contains(t, names, "kargo_api_http_requests_in_flight")
 }
