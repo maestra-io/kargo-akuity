@@ -119,6 +119,9 @@ jobs:
             GIT_TREE_STATE=clean
           tags: |
             ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPO }}:${{ github.ref_name }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
