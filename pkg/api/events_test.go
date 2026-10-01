@@ -31,6 +31,18 @@ func TestFormatEventUserActor(t *testing.T) {
 			expected: kargoapi.EventActorKubernetesUserPrefix + "system:serviceaccount:kargo-demo:ci-bot",
 		},
 		{
+			name: "kubernetes service account acting as a human",
+			user: user.Info{
+				KubernetesUserInfo: &authnv1.UserInfo{
+					Username: "system:serviceaccount:kargo-demo:ci-bot",
+				},
+				Claims: map[string]any{
+					"email": "tony@starkindustries.com",
+				},
+			},
+			expected: kargoapi.EventActorEmailPrefix + "tony@starkindustries.com",
+		},
+		{
 			name: "sub",
 			user: user.Info{
 				Claims: map[string]any{

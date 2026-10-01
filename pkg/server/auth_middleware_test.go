@@ -726,6 +726,9 @@ func TestAuthMiddlewareHandler(t *testing.T) {
 		expectedStatus int
 		expectedBody   string
 		expectUserInfo bool
+		// actAsEmail, when set, is sent as the X-Kargo-Act-As-Email header and is
+		// expected to be recorded as the "email" claim of the bound user.
+		actAsEmail string
 	}{
 		{
 			name: "exempt path - no auth required",
@@ -801,6 +804,27 @@ func TestAuthMiddlewareHandler(t *testing.T) {
 			expectedStatus: http.StatusOK,
 			expectUserInfo: true,
 		},
+		{
+			name: "kubernetes token acting as a human",
+			path: "/v1beta1/projects",
+			authMiddleware: &authMiddleware{
+				parseUnverifiedJWTFn: func(_ string, claims jwt.Claims) (*jwt.Token, []string, error) {
+					rc, ok := claims.(*jwt.RegisteredClaims)
+					require.True(t, ok)
+					rc.Issuer = "unrecognized-issuer"
+					return nil, nil, nil
+				},
+				verifyKubernetesTokenFn: func(context.Context, string) (*authnv1.UserInfo, error) {
+					return &authnv1.UserInfo{
+						Username: "system:serviceaccount:kargo-demo:ci-bot",
+					}, nil
+				},
+			},
+			token:          "some-token",
+			actAsEmail:     "tony@starkindustries.com",
+			expectedStatus: http.StatusOK,
+			expectUserInfo: true,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -813,14 +837,22 @@ func TestAuthMiddlewareHandler(t *testing.T) {
 			router.Use(srv.handleError)
 			router.Use(tc.authMiddleware.Handler)
 			router.GET("/v1beta1/*path", func(c *gin.Context) {
-				_, hasUser := user.InfoFromContext(c.Request.Context())
+				u, hasUser := user.InfoFromContext(c.Request.Context())
 				require.Equal(t, tc.expectUserInfo, hasUser)
+				if tc.actAsEmail != "" {
+					require.Equal(t, tc.actAsEmail, u.Claims["email"])
+					require.NotContains(t, u.Claims, "sub")
+					require.NotNil(t, u.KubernetesUserInfo)
+				}
 				c.Status(http.StatusOK)
 			})
 
 			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
 			if tc.token != "" {
 				req.Header.Set("Authorization", "Bearer "+tc.token)
+			}
+			if tc.actAsEmail != "" {
+				req.Header.Set(actAsEmailHeaderKey, tc.actAsEmail)
 			}
 
 			w := httptest.NewRecorder()
@@ -830,6 +862,86 @@ func TestAuthMiddlewareHandler(t *testing.T) {
 			if tc.expectedBody != "" {
 				require.JSONEq(t, tc.expectedBody, w.Body.String())
 			}
+		})
+	}
+}
+
+func TestWithActAsEmail(t *testing.T) {
+	k8sUser := user.Info{
+		KubernetesUserInfo: &authnv1.UserInfo{
+			Username: "system:serviceaccount:kargo-demo:ci-bot",
+		},
+	}
+	testCases := []struct {
+		name       string
+		ctx        context.Context
+		actAsEmail string
+		assertions func(t *testing.T, ctx context.Context)
+	}{
+		{
+			name:       "no header is a no-op",
+			ctx:        user.ContextWithInfo(context.Background(), k8sUser),
+			actAsEmail: "",
+			assertions: func(t *testing.T, ctx context.Context) {
+				u, ok := user.InfoFromContext(ctx)
+				require.True(t, ok)
+				require.Nil(t, u.Claims)
+			},
+		},
+		{
+			name:       "no user bound is a no-op",
+			ctx:        context.Background(),
+			actAsEmail: "tony@starkindustries.com",
+			assertions: func(t *testing.T, ctx context.Context) {
+				_, ok := user.InfoFromContext(ctx)
+				require.False(t, ok)
+			},
+		},
+		{
+			// OIDC users carry their own identity; the header must not let them
+			// pose as someone else.
+			name: "ignored for an OIDC user",
+			ctx: user.ContextWithInfo(context.Background(), user.Info{
+				Username: "foo",
+				Claims:   map[string]any{"sub": "ironman", "email": "foo@example.com"},
+			}),
+			actAsEmail: "tony@starkindustries.com",
+			assertions: func(t *testing.T, ctx context.Context) {
+				u, ok := user.InfoFromContext(ctx)
+				require.True(t, ok)
+				require.Equal(t, "foo@example.com", u.Claims["email"])
+			},
+		},
+		{
+			name:       "ignored for the admin user",
+			ctx:        user.ContextWithInfo(context.Background(), user.Info{IsAdmin: true}),
+			actAsEmail: "tony@starkindustries.com",
+			assertions: func(t *testing.T, ctx context.Context) {
+				u, ok := user.InfoFromContext(ctx)
+				require.True(t, ok)
+				require.True(t, u.IsAdmin)
+				require.Nil(t, u.Claims)
+			},
+		},
+		{
+			// The email is recorded for attribution only: no "sub" claim is
+			// synthesized, so authorization keeps using the Kubernetes identity.
+			name:       "recorded for a Kubernetes-token caller",
+			ctx:        user.ContextWithInfo(context.Background(), k8sUser),
+			actAsEmail: "tony@starkindustries.com",
+			assertions: func(t *testing.T, ctx context.Context) {
+				u, ok := user.InfoFromContext(ctx)
+				require.True(t, ok)
+				require.Equal(t, "tony@starkindustries.com", u.Claims["email"])
+				require.NotContains(t, u.Claims, "sub")
+				require.NotNil(t, u.KubernetesUserInfo)
+				require.Equal(t, "system:serviceaccount:kargo-demo:ci-bot", u.KubernetesUserInfo.Username)
+			},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.assertions(t, withActAsEmail(tc.ctx, tc.actAsEmail))
 		})
 	}
 }
