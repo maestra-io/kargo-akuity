@@ -34,6 +34,13 @@ import (
 
 const authHeaderKey = "Authorization"
 
+// actAsEmailHeaderKey is the request header through which a caller
+// authenticating with a Kubernetes token (an automation pipeline's
+// ServiceAccount, typically) declares the human on whose behalf it is acting,
+// so that what it does is attributed to that person rather than to the
+// ServiceAccount. It never influences authorization. See withActAsEmail.
+const actAsEmailHeaderKey = "X-Kargo-Act-As-Email"
+
 // errNoToken and errInvalidToken are the only authentication failures reported
 // to clients. Both carry a 401 and disclose nothing about which check rejected
 // the credential. Where the underlying reason is useful, sites wrap
@@ -159,10 +166,38 @@ func (a *authMiddleware) Handler(c *gin.Context) {
 	}
 
 	// Update the request context with authenticated user info
+	newCtx = withActAsEmail(newCtx, c.GetHeader(actAsEmailHeaderKey))
 	c.Request = c.Request.WithContext(newCtx)
 
 	logger.Debug("authentication successful")
 	c.Next()
+}
+
+// withActAsEmail records actAsEmail as the "email" claim of the user bound to
+// ctx, but only when Kubernetes authenticated that user (i.e. the caller holds
+// a ServiceAccount token) and the header was set. Admin and OIDC users already
+// carry their own identity, and the header is ignored for them.
+//
+// This influences ONLY attribution (see api.FormatEventUserActor, which
+// prefers this claim over the ServiceAccount's name): no "sub" claim is
+// synthesized, so authorization still flows through the caller's own
+// Kubernetes identity (a SubjectAccessReview as that user) and the header
+// cannot widen what the caller may do.
+func withActAsEmail(ctx context.Context, actAsEmail string) context.Context {
+	if actAsEmail == "" {
+		return ctx
+	}
+	u, ok := user.InfoFromContext(ctx)
+	if !ok || u.KubernetesUserInfo == nil {
+		return ctx
+	}
+	u.Claims = map[string]any{"email": actAsEmail}
+	logging.LoggerFromContext(ctx).Debug(
+		"attributing request to act-as email",
+		"actAsEmail", actAsEmail,
+		"username", u.KubernetesUserInfo.Username,
+	)
+	return user.ContextWithInfo(ctx, u)
 }
 
 // authenticate validates the token and extracts user information
