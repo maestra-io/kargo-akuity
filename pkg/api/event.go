@@ -30,6 +30,14 @@ func FormatEventUserActor(u user.Info) string {
 		return kargoapi.EventActorAdmin
 	}
 	if u.KubernetesUserInfo != nil {
+		// A Kubernetes-authenticated caller (an automation pipeline's
+		// ServiceAccount, typically) may have declared, via the
+		// X-Kargo-Act-As-Email header, the human on whose behalf it acts. The
+		// auth middleware records that as the "email" claim; prefer it over the
+		// ServiceAccount's name so the action shows the person who triggered it.
+		if email, ok := u.Claims["email"].(string); ok && email != "" {
+			return kargoapi.EventActorEmailPrefix + email
+		}
 		return FormatEventKubernetesUserActor(*u.KubernetesUserInfo)
 	}
 	if u.Username != "" {
