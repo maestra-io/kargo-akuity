@@ -1,0 +1,282 @@
+package server
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"strings"
+	"testing"
+
+	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/stretchr/testify/require"
+	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
+)
+
+func TestClassifyRoute(t *testing.T) {
+	testCases := []struct {
+		name     string
+		path     string
+		expected string
+	}{
+		{
+			name:     "REST API is measured by the Gin middleware",
+			path:     "/v1beta1/projects/kargo-demo/stages/test",
+			expected: routeSkip,
+		},
+		{
+			name:     "health checks are collapsed",
+			path:     healthRoutePath,
+			expected: routeHealth,
+		},
+		{
+			name:     "Dex proxy is collapsed",
+			path:     "/dex/.well-known/openid-configuration",
+			expected: routeDex,
+		},
+		{
+			name:     "UI bundle is collapsed",
+			path:     "/assets/index-abc123.js",
+			expected: routeUI,
+		},
+		{
+			name:     "UI index is collapsed",
+			path:     "/",
+			expected: routeUI,
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			require.Equal(t, testCase.expected, classifyRoute(testCase.path))
+		})
+	}
+}
+
+func TestInstrumentHandler(t *testing.T) {
+	testCases := []struct {
+		name          string
+		path          string
+		code          int
+		expectedRoute string
+	}{
+		{
+			name:          "health check",
+			path:          healthRoutePath,
+			code:          http.StatusOK,
+			expectedRoute: routeHealth,
+		},
+		{
+			name:          "Dex proxy error keeps the collapsed route",
+			path:          "/dex/token",
+			code:          http.StatusBadGateway,
+			expectedRoute: routeDex,
+		},
+		{
+			name: "arbitrary path that does not exist is collapsed, so a " +
+				"caller cannot mint label values",
+			path:          "/not/a/real/path",
+			code:          http.StatusNotFound,
+			expectedRoute: routeUI,
+		},
+		{
+			name:          "UI asset that does not exist stays collapsed",
+			path:          "/assets/nope.js",
+			code:          http.StatusNotFound,
+			expectedRoute: routeUI,
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			httpRequestsTotal.Reset()
+
+			handler := instrumentHandler(
+				http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					w.WriteHeader(testCase.code)
+				}),
+				"",
+			)
+			handler.ServeHTTP(
+				httptest.NewRecorder(),
+				httptest.NewRequest(http.MethodPost, testCase.path, nil),
+			)
+
+			require.Equal(
+				t,
+				float64(1),
+				testutil.ToFloat64(
+					httpRequestsTotal.WithLabelValues(
+						testCase.expectedRoute,
+						http.MethodPost,
+						strconv.Itoa(testCase.code),
+					),
+				),
+			)
+			require.Equal(t, 1, testutil.CollectAndCount(httpRequestsTotal))
+		})
+	}
+}
+
+func TestInstrumentHandlerSkipsREST(t *testing.T) {
+	httpRequestsTotal.Reset()
+
+	handler := instrumentHandler(
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}),
+		"",
+	)
+	handler.ServeHTTP(
+		httptest.NewRecorder(),
+		httptest.NewRequest(http.MethodGet, "/v1beta1/projects", nil),
+	)
+
+	// The Gin middleware owns REST requests; counting them here as well would
+	// double every REST series.
+	require.Equal(t, 0, testutil.CollectAndCount(httpRequestsTotal))
+}
+
+// instrumentHandler wraps the server's outermost handler, outside the basePath
+// stripping, so it must trim the prefix itself. Without that, every request to
+// a server mounted under a basePath would classify as routeUI, and REST
+// requests would be double-counted instead of skipped.
+func TestInstrumentHandlerTrimsBasePath(t *testing.T) {
+	const basePath = "/my-kargo"
+
+	t.Run("route is classified on the trimmed path", func(t *testing.T) {
+		httpRequestsTotal.Reset()
+
+		handler := instrumentHandler(
+			http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}),
+			basePath,
+		)
+		handler.ServeHTTP(
+			httptest.NewRecorder(),
+			httptest.NewRequest(http.MethodGet, basePath+dexRoutePrefix+"auth", nil),
+		)
+
+		require.Equal(
+			t,
+			float64(1),
+			testutil.ToFloat64(
+				httpRequestsTotal.WithLabelValues(
+					routeDex,
+					http.MethodGet,
+					strconv.Itoa(http.StatusOK),
+				),
+			),
+		)
+		require.Equal(t, 1, testutil.CollectAndCount(httpRequestsTotal))
+	})
+
+	t.Run("REST is still skipped under a basePath", func(t *testing.T) {
+		httpRequestsTotal.Reset()
+
+		handler := instrumentHandler(
+			http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}),
+			basePath,
+		)
+		handler.ServeHTTP(
+			httptest.NewRecorder(),
+			httptest.NewRequest(http.MethodGet, basePath+"/v1beta1/projects", nil),
+		)
+
+		require.Equal(t, 0, testutil.CollectAndCount(httpRequestsTotal))
+	})
+}
+
+func TestInstrumentHandlerPreservesFlusher(t *testing.T) {
+	var flushable bool
+	handler := instrumentHandler(
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			// Streaming handlers depend on this.
+			_, flushable = w.(http.Flusher)
+			w.WriteHeader(http.StatusOK)
+		}),
+		"",
+	)
+	handler.ServeHTTP(
+		httptest.NewRecorder(),
+		httptest.NewRequest(http.MethodGet, "/", nil),
+	)
+	require.True(t, flushable)
+}
+
+func TestGinMetricsMiddleware(t *testing.T) {
+	testCases := []struct {
+		name          string
+		register      string
+		request       string
+		expectedRoute string
+		expectedCode  int
+	}{
+		{
+			name: "matched route is labeled by template, not by the " +
+				"concrete project name",
+			register:      "/v1beta1/projects/:project/stages/:stage",
+			request:       "/v1beta1/projects/kargo-demo/stages/test",
+			expectedRoute: "/v1beta1/projects/:project/stages/:stage",
+			expectedCode:  http.StatusOK,
+		},
+		{
+			name:          "unmatched route is collapsed",
+			register:      "/v1beta1/projects",
+			request:       "/v1beta1/nope",
+			expectedRoute: routeRESTUnmatched,
+			expectedCode:  http.StatusNotFound,
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			httpRequestsTotal.Reset()
+
+			gin.SetMode(gin.TestMode)
+			router := gin.New()
+			router.Use(ginMetricsMiddleware())
+			router.GET(testCase.register, func(c *gin.Context) {
+				c.Status(http.StatusOK)
+			})
+			router.ServeHTTP(
+				httptest.NewRecorder(),
+				httptest.NewRequest(http.MethodGet, testCase.request, nil),
+			)
+
+			require.Equal(t, 1, testutil.CollectAndCount(httpRequestsTotal))
+			require.Equal(
+				t,
+				float64(1),
+				testutil.ToFloat64(
+					httpRequestsTotal.WithLabelValues(
+						testCase.expectedRoute,
+						http.MethodGet,
+						strconv.Itoa(testCase.expectedCode),
+					),
+				),
+			)
+		})
+	}
+}
+
+func TestRegisterMetrics(t *testing.T) {
+	// Idempotent: Serve calls it, and a second call must not panic with
+	// duplicate registration.
+	registerMetrics()
+	registerMetrics()
+
+	families, err := ctrlmetrics.Registry.Gather()
+	require.NoError(t, err)
+
+	var names []string
+	for _, family := range families {
+		if strings.HasPrefix(family.GetName(), "kargo_api_") {
+			names = append(names, family.GetName())
+		}
+	}
+	// Only the gauge is asserted: a *Vec with no children emits no family at
+	// all, and which requests other tests in this package have recorded is not
+	// this test's business.
+	require.Contains(t, names, "kargo_api_http_requests_in_flight")
+}
