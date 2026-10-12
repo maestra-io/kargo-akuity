@@ -32,13 +32,14 @@ env:
 
 jobs:
   publish-image:
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/pool=build
     services:
       registry:
         image: registry:3.0.0
         ports:
           - 5000:5000
     steps:
+      - uses: runs-on/action@v2
       - uses: actions/checkout@v6
 
       - name: Get Teleport version
