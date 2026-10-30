@@ -37,6 +37,7 @@ type promotionOptions struct {
 	Stage          string
 	DownstreamFrom string
 	Abort          bool
+	Rollback       bool
 	Wait           bool
 }
 
@@ -151,6 +152,11 @@ func (o *promotionOptions) addFlags(cmd *cobra.Command) {
 	option.Abort(cmd.Flags(), &o.Abort, false, fmt.Sprintf(
 		"Abort a non-terminal promotion. If set, --%s must be set.", option.NameFlag,
 	))
+	option.Rollback(
+		cmd.Flags(), &o.Rollback,
+		"Mark the promotion(s) as an intentional rollback. Required to promote "+
+			"freight that would lower an artifact's version in the stage.",
+	)
 	option.Wait(cmd.Flags(), &o.Wait, false, "Wait for the promotion(s) to complete.")
 	cmd.MarkFlagsOneRequired(option.FreightFlag, option.FreightAliasFlag, option.WarehouseFlag, option.NameFlag)
 	cmd.MarkFlagsMutuallyExclusive(option.FreightFlag, option.FreightAliasFlag, option.WarehouseFlag, option.NameFlag)
@@ -235,6 +241,7 @@ func (o *promotionOptions) run(ctx context.Context) error {
 				Freight:      &o.FreightName,
 				FreightAlias: &o.FreightAlias,
 				Origin:       &origin,
+				Rollback:     &o.Rollback,
 			}).
 			Execute()
 		if httpRes != nil {
@@ -264,6 +271,7 @@ func (o *promotionOptions) run(ctx context.Context) error {
 			Body(kargogen.PromoteDownstreamRequest{
 				Freight:      &o.FreightName,
 				FreightAlias: &o.FreightAlias,
+				Rollback:     &o.Rollback,
 			}).
 			Execute()
 		if httpRes != nil {

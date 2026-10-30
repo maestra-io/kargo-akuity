@@ -649,12 +649,62 @@ func (w *webhook) ValidateCreate(
 		)
 	}
 
+	if denyErr := validateNotDowngrade(promo, stage, freight); denyErr != nil {
+		return nil, denyErr
+	}
+
 	// Record Promotion created event if the request doesn't come from Kargo controlplane
 	if !w.isRequestFromKargoControlplaneFn(req) {
 		w.recordPromotionCreatedEvent(ctx, req, promo, freight)
 	}
 
 	return nil, nil
+}
+
+// validateNotDowngrade denies a Promotion whose Freight would lower the version
+// of any artifact the Stage currently has from the same origin, unless the
+// Promotion is explicitly marked as a rollback.
+//
+// There is no exemption by caller: auto-promotions are checked like any other.
+// The denial is Forbidden, which the Stage controller already tolerates on
+// auto-promotion -- it skips the candidate and re-derives on a later reconcile.
+//
+// Promotions to a Target are not checked. Their baseline is the Target's
+// current Freight, not the Stage's, and the Stage's FreightHistory does not
+// record it.
+func validateNotDowngrade(
+	promo *kargoapi.Promotion,
+	stage *kargoapi.Stage,
+	freight *kargoapi.Freight,
+) error {
+	if isRollback(promo) || promo.Spec.Target != "" {
+		return nil
+	}
+	currentFreight := stage.Status.FreightHistory.Current()
+	if currentFreight == nil {
+		return nil
+	}
+	current, ok := currentFreight.Freight[freight.Origin.String()]
+	if !ok {
+		return nil
+	}
+	downgrades := findDowngrades(&current, freight)
+	if len(downgrades) == 0 {
+		return nil
+	}
+	return apierrors.NewForbidden(
+		promotionGroupResource,
+		promo.Name,
+		fmt.Errorf(
+			"promoting Freight %q would downgrade Stage %q (%s); promote it "+
+				"as a rollback (annotation %s: %q) if this is intended",
+			freight.Name,
+			stage.Name,
+			strings.Join(downgrades, ", "),
+			kargoapi.AnnotationKeyRollback,
+			kargoapi.AnnotationValueTrue,
+		),
+	)
 }
 
 // validateTargetIsPromotionRequestChild enforces that a Promotion naming a

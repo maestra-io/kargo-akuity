@@ -5351,6 +5351,10 @@
         },
         "freightAlias": {
           "type": "string"
+        },
+        "rollback": {
+          "description": "Rollback marks every created Promotion as an intentional rollback. The\npromotion webhook denies Freight that would downgrade a Stage unless it\nis set.",
+          "type": "boolean"
         }
       }
     },
@@ -5366,6 +5370,10 @@
         "origin": {
           "description": "Origin is the canonical Freight origin key (e.g. \"Warehouse/foo\"). When\nset, the promotion webhook resolves it to the current auto-promotion\ncandidate. Exactly one of Freight, FreightAlias, or Origin must be set.",
           "type": "string"
+        },
+        "rollback": {
+          "description": "Rollback marks the Promotion as an intentional rollback. The promotion\nwebhook denies Freight that would downgrade the Stage unless it is set.",
+          "type": "boolean"
         }
       }
     },

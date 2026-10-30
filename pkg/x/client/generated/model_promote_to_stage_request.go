@@ -23,6 +23,8 @@ type PromoteToStageRequest struct {
 	FreightAlias *string `json:"freightAlias,omitempty"`
 	// Origin is the canonical Freight origin key (e.g. \"Warehouse/foo\"). When set, the promotion webhook resolves it to the current auto-promotion candidate. Exactly one of Freight, FreightAlias, or Origin must be set.
 	Origin *string `json:"origin,omitempty"`
+	// Rollback marks the Promotion as an intentional rollback. The promotion webhook denies Freight that would downgrade the Stage unless it is set.
+	Rollback *bool `json:"rollback,omitempty"`
 }
 
 // NewPromoteToStageRequest instantiates a new PromoteToStageRequest object
@@ -138,6 +140,38 @@ func (o *PromoteToStageRequest) SetOrigin(v string) {
 	o.Origin = &v
 }
 
+// GetRollback returns the Rollback field value if set, zero value otherwise.
+func (o *PromoteToStageRequest) GetRollback() bool {
+	if o == nil || IsNil(o.Rollback) {
+		var ret bool
+		return ret
+	}
+	return *o.Rollback
+}
+
+// GetRollbackOk returns a tuple with the Rollback field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *PromoteToStageRequest) GetRollbackOk() (*bool, bool) {
+	if o == nil || IsNil(o.Rollback) {
+		return nil, false
+	}
+	return o.Rollback, true
+}
+
+// HasRollback returns a boolean if a field has been set.
+func (o *PromoteToStageRequest) HasRollback() bool {
+	if o != nil && !IsNil(o.Rollback) {
+		return true
+	}
+
+	return false
+}
+
+// SetRollback gets a reference to the given bool and assigns it to the Rollback field.
+func (o *PromoteToStageRequest) SetRollback(v bool) {
+	o.Rollback = &v
+}
+
 func (o PromoteToStageRequest) MarshalJSON() ([]byte, error) {
 	toSerialize,err := o.ToMap()
 	if err != nil {
@@ -156,6 +190,9 @@ func (o PromoteToStageRequest) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.Origin) {
 		toSerialize["origin"] = o.Origin
+	}
+	if !IsNil(o.Rollback) {
+		toSerialize["rollback"] = o.Rollback
 	}
 	return toSerialize, nil
 }

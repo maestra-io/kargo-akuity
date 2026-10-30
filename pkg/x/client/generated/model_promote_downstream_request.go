@@ -21,6 +21,8 @@ var _ MappedNullable = &PromoteDownstreamRequest{}
 type PromoteDownstreamRequest struct {
 	Freight *string `json:"freight,omitempty"`
 	FreightAlias *string `json:"freightAlias,omitempty"`
+	// Rollback marks every created Promotion as an intentional rollback. The promotion webhook denies Freight that would downgrade a Stage unless it is set.
+	Rollback *bool `json:"rollback,omitempty"`
 }
 
 // NewPromoteDownstreamRequest instantiates a new PromoteDownstreamRequest object
@@ -104,6 +106,38 @@ func (o *PromoteDownstreamRequest) SetFreightAlias(v string) {
 	o.FreightAlias = &v
 }
 
+// GetRollback returns the Rollback field value if set, zero value otherwise.
+func (o *PromoteDownstreamRequest) GetRollback() bool {
+	if o == nil || IsNil(o.Rollback) {
+		var ret bool
+		return ret
+	}
+	return *o.Rollback
+}
+
+// GetRollbackOk returns a tuple with the Rollback field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *PromoteDownstreamRequest) GetRollbackOk() (*bool, bool) {
+	if o == nil || IsNil(o.Rollback) {
+		return nil, false
+	}
+	return o.Rollback, true
+}
+
+// HasRollback returns a boolean if a field has been set.
+func (o *PromoteDownstreamRequest) HasRollback() bool {
+	if o != nil && !IsNil(o.Rollback) {
+		return true
+	}
+
+	return false
+}
+
+// SetRollback gets a reference to the given bool and assigns it to the Rollback field.
+func (o *PromoteDownstreamRequest) SetRollback(v bool) {
+	o.Rollback = &v
+}
+
 func (o PromoteDownstreamRequest) MarshalJSON() ([]byte, error) {
 	toSerialize,err := o.ToMap()
 	if err != nil {
@@ -119,6 +153,9 @@ func (o PromoteDownstreamRequest) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.FreightAlias) {
 		toSerialize["freightAlias"] = o.FreightAlias
+	}
+	if !IsNil(o.Rollback) {
+		toSerialize["rollback"] = o.Rollback
 	}
 	return toSerialize, nil
 }

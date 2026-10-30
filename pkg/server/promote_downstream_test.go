@@ -244,6 +244,48 @@ func Test_server_promoteDownstream(t *testing.T) {
 					require.Len(t, promos.Items, 1)
 					require.Equal(t, testDownstreamStage.Name, promos.Items[0].Spec.Stage)
 					require.Equal(t, testFreight.Name, promos.Items[0].Spec.Freight)
+					require.NotContains(
+						t,
+						promos.Items[0].Annotations,
+						kargoapi.AnnotationKeyRollback,
+					)
+				},
+			},
+			{
+				name: "successfully promotes downstream as a rollback",
+				clientBuilder: fake.NewClientBuilder().WithObjects(
+					testProject,
+					testStage,
+					testDownstreamStage,
+					testFreight,
+				),
+				serverSetup: func(_ *testing.T, s *server) {
+					s.authorizeFn = func(
+						context.Context,
+						string,
+						schema.GroupVersionResource,
+						string,
+						client.ObjectKey,
+					) error {
+						return nil
+					}
+				},
+				body: mustJSONBody(promoteDownstreamRequest{
+					Freight:  testFreight.Name,
+					Rollback: true,
+				}),
+				assertions: func(t *testing.T, w *httptest.ResponseRecorder, c client.Client) {
+					require.Equal(t, http.StatusCreated, w.Code)
+
+					promos := &kargoapi.PromotionList{}
+					err := c.List(t.Context(), promos, client.InNamespace(testProject.Name))
+					require.NoError(t, err)
+					require.Len(t, promos.Items, 1)
+					require.Equal(
+						t,
+						kargoapi.AnnotationValueTrue,
+						promos.Items[0].Annotations[kargoapi.AnnotationKeyRollback],
+					)
 				},
 			},
 			{

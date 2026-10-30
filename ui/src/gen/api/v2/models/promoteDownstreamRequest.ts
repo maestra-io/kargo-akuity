@@ -9,4 +9,10 @@
 export interface PromoteDownstreamRequest {
   freight?: string;
   freightAlias?: string;
+  /**
+   * Rollback marks every created Promotion as an intentional rollback. The
+   * promotion webhook denies Freight that would downgrade a Stage unless it
+   * is set.
+   */
+  rollback?: boolean;
 }

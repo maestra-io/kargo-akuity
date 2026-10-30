@@ -51,6 +51,9 @@ type promoteToStageRequest struct {
 	// set, the promotion webhook resolves it to the current auto-promotion
 	// candidate. Exactly one of Freight, FreightAlias, or Origin must be set.
 	Origin string `json:"origin,omitempty"`
+	// Rollback marks the Promotion as an intentional rollback. The promotion
+	// webhook denies Freight that would downgrade the Stage unless it is set.
+	Rollback bool `json:"rollback,omitempty"`
 } // @name PromoteToStageRequest
 
 // @id PromoteToStage
@@ -156,6 +159,9 @@ func (s *server) promoteToStage(c *gin.Context) {
 		if u, ok := user.InfoFromContext(ctx); ok {
 			api.SetCreateActorAnnotation(promotion, api.FormatEventUserActor(u))
 		}
+		if req.Rollback {
+			api.SetRollbackAnnotation(promotion)
+		}
 		if err = s.createPromotionFn(ctx, promotion); err != nil {
 			_ = c.Error(err)
 			return
@@ -242,6 +248,9 @@ func (s *server) promoteToStage(c *gin.Context) {
 	promotion := api.NewMinimalPromotion(stage, freight.Name)
 	if u, ok := user.InfoFromContext(ctx); ok {
 		api.SetCreateActorAnnotation(promotion, api.FormatEventUserActor(u))
+	}
+	if req.Rollback {
+		api.SetRollbackAnnotation(promotion)
 	}
 
 	if err := s.createPromotionFn(ctx, promotion); err != nil {

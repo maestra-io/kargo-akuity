@@ -1,8 +1,8 @@
 import { faTruckArrowRight } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { Button, Drawer, Flex, Tooltip } from 'antd';
+import { Alert, Button, Checkbox, Drawer, Flex, Tooltip } from 'antd';
 import classNames from 'classnames';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { generatePath, useNavigate } from 'react-router-dom';
 
 import { paths } from '@ui/config/paths';
@@ -16,6 +16,7 @@ import { Freight, Stage } from '@ui/gen/api/v2/models';
 import { useDictionaryContext } from '../context/dictionary-context';
 import { isStageControlFlow, isStageTargetAware } from '../nodes/stage-meta-utils';
 
+import { findDowngrades } from './downgrade';
 import { FreightDetails } from './freight-details';
 import styles from './promote.module.less';
 import { isPromotionWindowClosed, promotionWindowClosedMessage } from './promotion-window';
@@ -43,6 +44,16 @@ export const Promote = (props: PromoteProps) => {
     () => getCurrentFreightForComparison(props.stage, props.freight),
     [props.stage, props.freight]
   );
+
+  // Kargo denies a promotion that would lower an artifact's version unless it
+  // is marked as a rollback. Downstream promotions span several Stages, so the
+  // drawer cannot pre-check them; the rollback box is still offered there and
+  // the server reports any downgrade it denies.
+  const downgrades = useMemo(
+    () => (isDownstreamPromotion ? [] : findDowngrades(currentFreightOnStage, props.freight)),
+    [isDownstreamPromotion, currentFreightOnStage, props.freight]
+  );
+  const [rollback, setRollback] = useState(false);
 
   const promoteActionMutation = usePromoteToStage({
     mutation: {
@@ -95,7 +106,7 @@ export const Promote = (props: PromoteProps) => {
     const payload = {
       stage: stageName || '',
       project: projectName || '',
-      data: { freight: props.freight?.metadata?.name }
+      data: { freight: props.freight?.metadata?.name, rollback: rollback || undefined }
     };
 
     if (isDownstreamPromotion) {
@@ -109,6 +120,7 @@ export const Promote = (props: PromoteProps) => {
   // a closed promotion window forbids promotion of this Stage. Downstream
   // promotions target other Stages, each gated by its own window.
   const windowClosed = !isDownstreamPromotion && isPromotionWindowClosed(props.stage);
+  const rollbackRequired = downgrades.length > 0 && !rollback;
 
   let promotingTo = stageName || '';
 
@@ -128,18 +140,50 @@ export const Promote = (props: PromoteProps) => {
       size='large'
       width={'1400px'}
       footer={
-        <Tooltip title={windowClosed ? promotionWindowClosedMessage(props.stage) : undefined}>
-          <Button
-            size='large'
-            className={classNames(styles['promote-btn'], 'ml-auto mt-5')}
-            icon={<FontAwesomeIcon icon={faTruckArrowRight} />}
-            onClick={onPromote}
-            disabled={windowClosed}
-            loading={promoteActionMutation.isPending || promoteDownstreamActionMutation.isPending}
+        <>
+          {downgrades.length > 0 && (
+            <Alert
+              type='warning'
+              showIcon
+              message='This promotion is a downgrade'
+              description={
+                <ul className='m-0 pl-4'>
+                  {downgrades.map((d) => (
+                    <li key={d}>{d}</li>
+                  ))}
+                </ul>
+              }
+            />
+          )}
+          <Checkbox
+            className='mt-3'
+            checked={rollback}
+            onChange={(e) => setRollback(e.target.checked)}
           >
-            Promote{isDownstreamPromotion && ' to downstream'}
-          </Button>
-        </Tooltip>
+            This is an intentional rollback (allow promoting an older version)
+          </Checkbox>
+          <Tooltip
+            title={
+              windowClosed
+                ? promotionWindowClosedMessage(props.stage)
+                : rollbackRequired
+                  ? 'Confirm the rollback to promote an older version'
+                  : undefined
+            }
+          >
+            <Button
+              size='large'
+              className={classNames(styles['promote-btn'], 'ml-auto mt-5')}
+              icon={<FontAwesomeIcon icon={faTruckArrowRight} />}
+              onClick={onPromote}
+              disabled={windowClosed || rollbackRequired}
+              loading={promoteActionMutation.isPending || promoteDownstreamActionMutation.isPending}
+            >
+              {rollback ? 'Roll back' : 'Promote'}
+              {isDownstreamPromotion && ' to downstream'}
+            </Button>
+          </Tooltip>
+        </>
       }
     >
       <div className='-mt-4'>
