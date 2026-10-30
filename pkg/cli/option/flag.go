@@ -112,6 +112,9 @@ const (
 	// RoleFlag is the flag name for the role flag.
 	RoleFlag = "role"
 
+	// RollbackFlag is the flag name for the rollback flag.
+	RollbackFlag = "rollback"
+
 	// SharedFlag is the flag name for the shared flag.
 	SharedFlag = "shared"
 
@@ -320,6 +323,11 @@ func ResourceName(fs *pflag.FlagSet, resourceName *string, usage string) {
 // ResourceType adds the ResourceTypeFlag to the provided flag set.
 func ResourceType(fs *pflag.FlagSet, repoType *string, usage string) {
 	fs.StringVar(repoType, ResourceTypeFlag, "", usage)
+}
+
+// Rollback adds the RollbackFlag to the provided flag set.
+func Rollback(fs *pflag.FlagSet, rollback *bool, usage string) {
+	fs.BoolVar(rollback, RollbackFlag, false, usage)
 }
 
 // Role adds the RoleFlag to the provided flag set.

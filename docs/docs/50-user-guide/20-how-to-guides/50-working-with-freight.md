@@ -308,6 +308,59 @@ kargo promote \
 </TabItem>
 </Tabs>
 
+## Rolling Back
+
+:::note
+
+Downgrade protection is a Maestra fork extension. It is not part of upstream
+Kargo.
+
+:::
+
+Kargo refuses to promote `Freight` that would _lower_ the version of any
+artifact the `Stage` currently has from the same origin. Image tags, chart
+versions, Git tags, and generic artifact versions are compared as semantic
+versions; artifacts whose versions are not semantic versions, or that have no
+counterpart in the `Stage`'s current `Freight`, are never judged. The check
+applies to every `Promotion`, including automatic ones: an auto-promotion that
+would be a downgrade is skipped.
+
+To roll back intentionally, mark the promotion as a rollback:
+
+<Tabs groupId="rolling-back">
+<TabItem value="ui" label="Using the UI" default>
+
+When the selected `Freight` is older than the `Stage`'s current `Freight`, the
+promotion drawer lists the downgraded artifacts and disables the
+<Hlt>Promote</Hlt> button. Tick
+<Hlt>This is an intentional rollback (allow promoting an older version)</Hlt>
+and click <Hlt>Roll back</Hlt>.
+
+</TabItem>
+<TabItem value="cli" label="Using the CLI">
+
+```shell
+kargo promote \
+  --project kargo-demo \
+  --freight-alias frozen-tauntaun \
+  --stage prod \
+  --rollback
+```
+
+</TabItem>
+<TabItem value="api" label="Using the API">
+
+Set `"rollback": true` in the body of a promote-to-stage or promote-downstream
+request. A `Promotion` created directly carries the annotation
+`kargo.akuity.io/rollback: "true"` instead.
+
+</TabItem>
+</Tabs>
+
+The annotation is also exposed to promotion steps as
+`ctx.meta.promotion.rollback`, so a promotion process can, for instance, mark
+rollback commits.
+
 ## OCI Image Annotations
 
 Kargo understands

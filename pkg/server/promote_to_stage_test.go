@@ -406,6 +406,28 @@ func Test_server_promoteToStage(t *testing.T) {
 				},
 			},
 			{
+				name:          "Successfully promote by freight name as a rollback",
+				clientBuilder: fake.NewClientBuilder().WithObjects(testProject, testStage, testFreight),
+				serverSetup:   authorizeAllStagesPromote,
+				body: mustJSONBody(promoteToStageRequest{
+					Freight:  testFreight.Name,
+					Rollback: true,
+				}),
+				assertions: func(t *testing.T, w *httptest.ResponseRecorder, c client.Client) {
+					require.Equal(t, http.StatusCreated, w.Code)
+
+					promos := &kargoapi.PromotionList{}
+					err := c.List(t.Context(), promos, client.InNamespace(testProject.Name))
+					require.NoError(t, err)
+					require.Len(t, promos.Items, 1)
+					require.Equal(
+						t,
+						kargoapi.AnnotationValueTrue,
+						promos.Items[0].Annotations[kargoapi.AnnotationKeyRollback],
+					)
+				},
+			},
+			{
 				name:          "Successfully promote by freight alias",
 				clientBuilder: fake.NewClientBuilder().WithObjects(testProject, testStage, testFreight),
 				serverSetup:   authorizeAllStagesPromote,

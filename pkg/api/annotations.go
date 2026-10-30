@@ -151,6 +151,17 @@ func SetCreateActorAnnotation(obj client.Object, actor string) {
 	obj.SetAnnotations(annotations)
 }
 
+// SetRollbackAnnotation stamps obj with AnnotationKeyRollback, marking it as an
+// intentional rollback. It initializes the annotations map if necessary.
+func SetRollbackAnnotation(obj client.Object) {
+	annotations := obj.GetAnnotations()
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
+	annotations[kargoapi.AnnotationKeyRollback] = kargoapi.AnnotationValueTrue
+	obj.SetAnnotations(annotations)
+}
+
 // CreateActorAnnotationValue extracts the v1alpha1.AnnotationKeyCreateActor
 // value from the Promotion's annotations and returns it. If the value contains
 // a colon, everything after the first colon is returned. Otherwise, the

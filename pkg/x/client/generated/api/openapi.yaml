@@ -4038,17 +4038,25 @@ components:
       example:
         freight: freight
         freightAlias: freightAlias
+        rollback: true
       properties:
         freight:
           type: string
         freightAlias:
           type: string
+        rollback:
+          description: |-
+            Rollback marks every created Promotion as an intentional rollback. The
+            promotion webhook denies Freight that would downgrade a Stage unless it
+            is set.
+          type: boolean
       type: object
     PromoteToStageRequest:
       example:
         freight: freight
         freightAlias: freightAlias
         origin: origin
+        rollback: true
       properties:
         freight:
           type: string
@@ -4060,6 +4068,11 @@ components:
             set, the promotion webhook resolves it to the current auto-promotion
             candidate. Exactly one of Freight, FreightAlias, or Origin must be set.
           type: string
+        rollback:
+          description: |-
+            Rollback marks the Promotion as an intentional rollback. The promotion
+            webhook denies Freight that would downgrade the Stage unless it is set.
+          type: boolean
       type: object
     PublicConfig:
       example:
