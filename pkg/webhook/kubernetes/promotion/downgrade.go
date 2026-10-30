@@ -22,8 +22,13 @@ func isRollback(promo *kargoapi.Promotion) bool {
 //
 // Artifacts are matched by identity within the origin: images by repository
 // URL, charts by repository URL and name, commits by repository URL, generic
-// artifacts by subscription name. Only semantic versions are compared -- an
-// image tag, a chart version, a commit's tag, an artifact's version. A pair
+// artifacts by subscription name. Images, charts and commits must also come
+// from the same subscription, since a Warehouse may subscribe to one
+// repository more than once (e.g. two tag lines); Freight that predates
+// subscription names has none on either side and still matches.
+//
+// Only semantic versions are compared -- an image tag, a chart version, a
+// commit's tag, an artifact's version. A pair
 // that is not comparable (no counterpart in the current Freight, or either side
 // not a semantic version) is never reported, so the check cannot block a
 // promotion it cannot judge.
@@ -46,21 +51,24 @@ func findDowngrades(
 
 	for _, img := range target.Images {
 		for _, cur := range current.Images {
-			if cur.RepoURL == img.RepoURL {
+			if cur.RepoURL == img.RepoURL &&
+				cur.SubscriptionName == img.SubscriptionName {
 				check("image "+img.RepoURL, cur.Tag, img.Tag)
 			}
 		}
 	}
 	for _, chart := range target.Charts {
 		for _, cur := range current.Charts {
-			if cur.RepoURL == chart.RepoURL && cur.Name == chart.Name {
+			if cur.RepoURL == chart.RepoURL && cur.Name == chart.Name &&
+				cur.SubscriptionName == chart.SubscriptionName {
 				check("chart "+chartID(chart), cur.Version, chart.Version)
 			}
 		}
 	}
 	for _, commit := range target.Commits {
 		for _, cur := range current.Commits {
-			if cur.RepoURL == commit.RepoURL {
+			if cur.RepoURL == commit.RepoURL &&
+				cur.SubscriptionName == commit.SubscriptionName {
 				check("git "+commit.RepoURL, cur.Tag, commit.Tag)
 			}
 		}

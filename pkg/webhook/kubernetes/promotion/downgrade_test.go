@@ -70,6 +70,25 @@ func Test_findDowngrades(t *testing.T) {
 			target: &kargoapi.Freight{Images: []kargoapi.Image{{RepoURL: testRepo, Tag: "1.0.0"}}},
 		},
 		{
+			name: "image from a different subscription of the same repository is not compared",
+			current: &kargoapi.FreightReference{
+				Images: []kargoapi.Image{{RepoURL: testRepo, Tag: "2.0.0", SubscriptionName: "stable"}},
+			},
+			target: &kargoapi.Freight{
+				Images: []kargoapi.Image{{RepoURL: testRepo, Tag: "1.5.0", SubscriptionName: "lts"}},
+			},
+		},
+		{
+			name: "image from the same subscription is compared",
+			current: &kargoapi.FreightReference{
+				Images: []kargoapi.Image{{RepoURL: testRepo, Tag: "2.0.0", SubscriptionName: "stable"}},
+			},
+			target: &kargoapi.Freight{
+				Images: []kargoapi.Image{{RepoURL: testRepo, Tag: "1.5.0", SubscriptionName: "stable"}},
+			},
+			expected: []string{"image " + testRepo + " 2.0.0 -> 1.5.0"},
+		},
+		{
 			name: "chart downgrade",
 			current: &kargoapi.FreightReference{
 				Charts: []kargoapi.Chart{{RepoURL: "oci://example.com/charts", Name: "cdp-release", Version: "4.9220.0"}},

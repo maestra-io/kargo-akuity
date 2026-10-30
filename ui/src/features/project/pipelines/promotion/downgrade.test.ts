@@ -43,6 +43,16 @@ describe('findDowngrades', () => {
     expect(findDowngrades(current('latest'), incoming('1.0.0'))).toEqual([]);
   });
 
+  test('different subscriptions of the same repository are not compared', () => {
+    const cur = {
+      images: [{ repoURL: repo, tag: '2.0.0', subscriptionName: 'stable' }]
+    } as unknown as FreightReference;
+    const inc = {
+      images: [{ repoURL: repo, tag: '1.5.0', subscriptionName: 'lts' }]
+    } as unknown as Freight;
+    expect(findDowngrades(cur, inc)).toEqual([]);
+  });
+
   test('chart downgrade', () => {
     const cur = {
       charts: [{ repoURL: 'oci://example.com/charts', name: 'cdp-release', version: '4.9220.0' }]

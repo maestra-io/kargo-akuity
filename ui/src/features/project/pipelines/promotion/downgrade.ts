@@ -25,6 +25,10 @@ const isDowngrade = (from?: string, to?: string): boolean => {
   return Boolean(fromVer && toVer && semver.lt(toVer, fromVer));
 };
 
+// Artifacts are paired within the same subscription as well as the same
+// repository, like the server does: a Warehouse may subscribe to one
+// repository more than once.
+//
 // findDowngrades lists every artifact of the incoming Freight whose version
 // would go down relative to the Freight from the same origin currently on the
 // Stage. It mirrors the promotion webhook, which denies such a promotion unless
@@ -43,14 +47,18 @@ export const findDowngrades = (current?: FreightReference, incoming?: Freight): 
 
   for (const image of incoming.images || []) {
     for (const cur of current.images || []) {
-      if (cur.repoURL === image.repoURL) {
+      if (cur.repoURL === image.repoURL && cur.subscriptionName === image.subscriptionName) {
         check(`image ${image.repoURL}`, cur.tag, image.tag);
       }
     }
   }
   for (const chart of incoming.charts || []) {
     for (const cur of current.charts || []) {
-      if (cur.repoURL === chart.repoURL && cur.name === chart.name) {
+      if (
+        cur.repoURL === chart.repoURL &&
+        cur.name === chart.name &&
+        cur.subscriptionName === chart.subscriptionName
+      ) {
         const id = chart.name
           ? `${chart.repoURL?.replace(/\/$/, '')}/${chart.name}`
           : chart.repoURL;
@@ -60,7 +68,7 @@ export const findDowngrades = (current?: FreightReference, incoming?: Freight): 
   }
   for (const commit of incoming.commits || []) {
     for (const cur of current.commits || []) {
-      if (cur.repoURL === commit.repoURL) {
+      if (cur.repoURL === commit.repoURL && cur.subscriptionName === commit.subscriptionName) {
         check(`git ${commit.repoURL}`, cur.tag, commit.tag);
       }
     }
