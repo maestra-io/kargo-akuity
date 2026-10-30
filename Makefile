@@ -27,13 +27,14 @@ DOCKER_BUILD_OPTS 	=
 
 DOCS_PORT ?= 3000
 
-# Intelligently choose to build a multi-arch image if the intent is to push to a
-# container registry (IMAGE_PUSH=true). If not pushing, build an single-arch
-# image for the local architecture. Honor IMAGE_PLATFORMS above all.
+# Maestra: images are linux/amd64 only (every Maestra cluster is x86-64, and
+# kargo-base.apko.yaml builds no arm64 base). When pushing to a container
+# registry (IMAGE_PUSH=true), default to linux/amd64. If not pushing, build for
+# the local architecture. Honor IMAGE_PLATFORMS above all.
 ifeq ($(strip $(IMAGE_PUSH)),true)
   override DOCKER_BUILD_OPTS += --push
   ifeq ($(strip $(IMAGE_PLATFORMS)),)
-    override DOCKER_BUILD_OPTS += --platform=linux/amd64,linux/arm64
+    override DOCKER_BUILD_OPTS += --platform=linux/amd64
   endif
 endif
 ifneq ($(strip $(IMAGE_PLATFORMS)),)
@@ -377,7 +378,7 @@ hack-codegen: hack-build-dev-tools
 # Build image for local architecture (kargo:dev)
 #   make hack-build
 #
-# Push a multi-arch image to a personal repository (myusername/kargo:latest)
+# Push a linux/amd64 image to a personal repository (myusername/kargo:latest)
 #   make hack-build IMAGE_REPO=myusername/kargo IMAGE_PUSH=true IMAGE_TAG=latest
 #
 # Build a linux/amd64 image with a docker build option to not re-use docker build cache
@@ -388,7 +389,6 @@ hack-build: build-base-image
 		$(CONTAINER_RUNTIME) run -d -p $(LOCAL_REG_PORT):5000 --name tmp-registry registry:3.0.0; \
 		trap '$(CONTAINER_RUNTIME) rm -f tmp-registry' EXIT; \
 		$(CONTAINER_RUNTIME) push $(BASE_IMAGE):latest-amd64; \
-		$(CONTAINER_RUNTIME) push $(BASE_IMAGE):latest-arm64; \
 		$(CONTAINER_RUNTIME) buildx build \
 			$(DOCKER_BUILD_OPTS) \
 			--network host \
