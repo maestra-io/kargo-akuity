@@ -49,6 +49,10 @@ func (s *server) findDownstreamStages(
 type promoteDownstreamRequest struct {
 	Freight      string `json:"freight,omitempty"`
 	FreightAlias string `json:"freightAlias,omitempty"`
+	// Rollback marks every created Promotion as an intentional rollback. The
+	// promotion webhook denies Freight that would downgrade a Stage unless it
+	// is set.
+	Rollback bool `json:"rollback,omitempty"`
 } // @name PromoteDownstreamRequest
 
 // @id PromoteDownstream
@@ -210,6 +214,9 @@ func (s *server) promoteDownstream(c *gin.Context) {
 		newPromo := api.NewMinimalPromotion(&downstream, freight.Name)
 		if actor != "" {
 			api.SetCreateActorAnnotation(newPromo, actor)
+		}
+		if req.Rollback {
+			api.SetRollbackAnnotation(newPromo)
 		}
 
 		if err := s.client.Create(ctx, newPromo); err != nil {

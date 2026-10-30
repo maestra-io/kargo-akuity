@@ -15,4 +15,9 @@ export interface PromoteToStageRequest {
    * candidate. Exactly one of Freight, FreightAlias, or Origin must be set.
    */
   origin?: string;
+  /**
+   * Rollback marks the Promotion as an intentional rollback. The promotion
+   * webhook denies Freight that would downgrade the Stage unless it is set.
+   */
+  rollback?: boolean;
 }
