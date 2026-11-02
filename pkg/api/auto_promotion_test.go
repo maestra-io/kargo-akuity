@@ -446,6 +446,84 @@ func TestSelectAutoPromotionCandidates(t *testing.T) {
 			},
 		},
 		{
+			name:  "Freight opted out of auto-promotion is skipped",
+			stage: newestFreightStage,
+			availableFreight: []kargoapi.Freight{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "older-freight",
+						CreationTimestamp: metav1.Time{Time: now.Add(-time.Hour)},
+					},
+					Origin: warehouseOrigin,
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "opted-out-freight",
+						CreationTimestamp: metav1.Time{Time: now},
+						Labels: map[string]string{
+							labelKeyAutoPromotion: labelValueAutoPromotionDisabled,
+						},
+					},
+					Origin: warehouseOrigin,
+				},
+			},
+			assert: func(t *testing.T, candidates map[string]kargoapi.Freight) {
+				require.Equal(t, "older-freight", candidates[warehouseOrigin.String()].Name)
+			},
+		},
+		{
+			name:  "other auto-promotion label values do not opt out",
+			stage: newestFreightStage,
+			availableFreight: []kargoapi.Freight{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "older-freight",
+						CreationTimestamp: metav1.Time{Time: now.Add(-time.Hour)},
+					},
+					Origin: warehouseOrigin,
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "newer-freight",
+						CreationTimestamp: metav1.Time{Time: now},
+						Labels:            map[string]string{labelKeyAutoPromotion: "enabled"},
+					},
+					Origin: warehouseOrigin,
+				},
+			},
+			assert: func(t *testing.T, candidates map[string]kargoapi.Freight) {
+				require.Equal(t, "newer-freight", candidates[warehouseOrigin.String()].Name)
+			},
+		},
+		{
+			name:  "origin with only opted-out Freight has no candidate",
+			stage: newestFreightStage,
+			availableFreight: []kargoapi.Freight{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "opted-out-freight",
+						CreationTimestamp: metav1.Time{Time: now},
+						Labels: map[string]string{
+							labelKeyAutoPromotion: labelValueAutoPromotionDisabled,
+						},
+					},
+					Origin: warehouseOrigin,
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "other-freight",
+						CreationTimestamp: metav1.Time{Time: now.Add(-time.Hour)},
+					},
+					Origin: otherOrigin,
+				},
+			},
+			assert: func(t *testing.T, candidates map[string]kargoapi.Freight) {
+				require.Len(t, candidates, 1)
+				require.NotContains(t, candidates, warehouseOrigin.String())
+				require.Equal(t, "other-freight", candidates[otherOrigin.String()].Name)
+			},
+		},
+		{
 			name:  "matchUpstream selects the single available Freight",
 			stage: matchUpstreamStage,
 			availableFreight: []kargoapi.Freight{{
@@ -454,6 +532,44 @@ func TestSelectAutoPromotionCandidates(t *testing.T) {
 			}},
 			assert: func(t *testing.T, candidates map[string]kargoapi.Freight) {
 				require.Equal(t, "upstream-current-freight", candidates[warehouseOrigin.String()].Name)
+			},
+		},
+		{
+			name:  "matchUpstream skips opted-out upstream Freight",
+			stage: matchUpstreamStage,
+			availableFreight: []kargoapi.Freight{{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "opted-out-freight",
+					Labels: map[string]string{
+						labelKeyAutoPromotion: labelValueAutoPromotionDisabled,
+					},
+				},
+				Origin: warehouseOrigin,
+			}},
+			assert: func(t *testing.T, candidates map[string]kargoapi.Freight) {
+				require.Empty(t, candidates)
+			},
+		},
+		{
+			name:  "matchUpstream race check counts opted-out Freight",
+			stage: matchUpstreamStage,
+			availableFreight: []kargoapi.Freight{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "outgoing-freight"},
+					Origin:     warehouseOrigin,
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "incoming-opted-out-freight",
+						Labels: map[string]string{
+							labelKeyAutoPromotion: labelValueAutoPromotionDisabled,
+						},
+					},
+					Origin: warehouseOrigin,
+				},
+			},
+			assert: func(t *testing.T, candidates map[string]kargoapi.Freight) {
+				require.Empty(t, candidates)
 			},
 		},
 		{
