@@ -225,8 +225,11 @@ that it never races auto-promotion, or add it later to an existing `Freight`.
 
 Because such `Freight` is never the candidate, promoting it manually
 establishes a hold, so newer `Freight` does not automatically replace it.
-Promoting by origin (see above) likewise resolves to the newest `Freight` that
-is _not_ opted out.
+Promoting by origin (see above) skips opted-out `Freight` too. With
+`NewestFreight`, it resolves to the newest `Freight` that is _not_ opted out.
+With `MatchUpstream`, it succeeds only when exactly one `Freight` is available
+upstream and that `Freight` is not opted out; otherwise there is no candidate
+and promotion by origin is rejected.
 
 :::note
 
