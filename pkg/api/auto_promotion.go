@@ -87,6 +87,24 @@ func IsAutoPromotionEnabled(
 	return policy != nil && policy.AutoPromotionEnabled, nil
 }
 
+const (
+	// labelKeyAutoPromotion is a label key that can be set on a Freight
+	// resource to opt it out of auto-promotion. When set to
+	// labelValueAutoPromotionDisabled, the Freight is never selected as an
+	// auto-promotion candidate for any Stage; it can still be promoted
+	// manually.
+	labelKeyAutoPromotion = "kargo.maestra.io/auto-promotion"
+	// labelValueAutoPromotionDisabled is the labelKeyAutoPromotion value that
+	// opts a Freight resource out of auto-promotion.
+	labelValueAutoPromotionDisabled = "disabled"
+)
+
+// isAutoPromotionDisabled returns true if the Freight is labeled to opt out
+// of auto-promotion.
+func isAutoPromotionDisabled(freight *kargoapi.Freight) bool {
+	return freight.Labels[labelKeyAutoPromotion] == labelValueAutoPromotionDisabled
+}
+
 // SelectAutoPromotionCandidates returns, for each origin in the Stage's
 // requested Freight, the available Freight that origin's auto-promotion
 // selection policy would pick. Selection is all this does: it never decides
@@ -94,6 +112,11 @@ func IsAutoPromotionEnabled(
 // callers apply their own checks -- e.g. that the candidate is not already the
 // Stage's current Freight, that no Promotion for it already exists, and that
 // no auto-promotion hold blocks its origin.
+//
+// Freight labeled to opt out of auto-promotion (see labelKeyAutoPromotion) is
+// never a candidate. Because the hold logic compares a manually promoted
+// Freight against the candidate, manually promoting such Freight places an
+// auto-promotion hold, so newer Freight does not supersede it automatically.
 func SelectAutoPromotionCandidates(
 	ctx context.Context,
 	stage *kargoapi.Stage,
@@ -125,6 +148,27 @@ func SelectAutoPromotionCandidates(
 				"origin", origin,
 				"count", len(freight),
 			)
+			continue
+		}
+		// Filter opted-out Freight only after the MatchUpstream race check
+		// above: that check must see every Freight reported upstream, or an
+		// opted-out incoming Freight would leave the outgoing one looking like
+		// the single, current upstream Freight.
+		freight = slices.DeleteFunc(
+			freight,
+			func(f kargoapi.Freight) bool {
+				if !isAutoPromotionDisabled(&f) {
+					return false
+				}
+				logging.LoggerFromContext(ctx).Debug(
+					"Freight opted out of auto-promotion; skipping",
+					"origin", origin,
+					"freight", f.Name,
+				)
+				return true
+			},
+		)
+		if len(freight) == 0 {
 			continue
 		}
 

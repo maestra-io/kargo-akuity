@@ -216,6 +216,27 @@ kargo promote \
 
 :::
 
+**Opting `Freight` out of auto-promotion:** A `Freight` resource labeled
+`kargo.maestra.io/auto-promotion: disabled` is never an auto-promotion
+candidate, for any `Stage` and under either selection policy. It remains
+available and can still be promoted manually. Set the label when creating the
+`Freight` (for example, `Freight` assembled by hand for a one-off hotfix) so
+that it never races auto-promotion, or add it later to an existing `Freight`.
+
+Because such `Freight` is never the candidate, promoting it manually
+establishes a hold, so newer `Freight` does not automatically replace it.
+Promoting by origin (see above) skips opted-out `Freight` too. With
+`NewestFreight`, it resolves to the newest `Freight` that is _not_ opted out.
+With `MatchUpstream`, it succeeds only when exactly one `Freight` is available
+upstream and that `Freight` is not opted out; otherwise there is no candidate
+and promotion by origin is rejected.
+
+:::note
+
+This label is a Maestra fork extension and is not part of upstream Kargo.
+
+:::
+
 #### Examples
 
 In the following example, the `test` `Stage` requests `Freight` that has
