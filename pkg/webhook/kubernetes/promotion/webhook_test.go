@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	jsonpatch "gomodules.xyz/jsonpatch/v2"
@@ -1212,6 +1213,110 @@ func Test_webhook_Default(t *testing.T) {
 				}
 				require.Equal(t, origin.String(), promo.Annotations[kargoapi.AnnotationKeyAutoPromotionHold])
 				require.NotContains(t, promo.Annotations, kargoapi.AnnotationKeyRollback)
+			},
+		},
+		{
+			name: "stamps hold intent on promotion of newest Freight opted out of auto-promotion",
+			webhook: &webhook{
+				admissionRequestFromContextFn: admission.RequestFromContext,
+				isRequestFromKargoControlplaneFn: func(admission.Request) bool {
+					return false
+				},
+				isAutoPromotionEnabledFn: func(
+					_ context.Context,
+					_ client.Client,
+					_ metav1.ObjectMeta,
+				) (bool, error) {
+					return true, nil
+				},
+				getStageFn: func(
+					_ context.Context,
+					_ client.Client,
+					_ types.NamespacedName,
+				) (*kargoapi.Stage, error) {
+					return &kargoapi.Stage{
+						Spec: kargoapi.StageSpec{
+							PromotionTemplate: &kargoapi.PromotionTemplate{
+								Spec: kargoapi.PromotionTemplateSpec{
+									Steps: []kargoapi.PromotionStep{{}},
+								},
+							},
+							RequestedFreight: []kargoapi.FreightRequest{{
+								Origin: kargoapi.FreightOrigin{
+									Kind: kargoapi.FreightOriginKindWarehouse,
+									Name: "my-warehouse",
+								},
+								Sources: kargoapi.FreightSources{Direct: true},
+							}},
+						},
+					}, nil
+				},
+				getFreightFn: func(
+					_ context.Context,
+					_ client.Client,
+					_ types.NamespacedName,
+				) (*kargoapi.Freight, error) {
+					return &kargoapi.Freight{
+						Origin: kargoapi.FreightOrigin{
+							Kind: kargoapi.FreightOriginKindWarehouse,
+							Name: "my-warehouse",
+						},
+					}, nil
+				},
+				listFreightAvailableToStageFn: func(
+					_ context.Context,
+					_ client.Client,
+					_ *kargoapi.Stage,
+				) ([]kargoapi.Freight, error) {
+					now := time.Now()
+					return []kargoapi.Freight{
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:              "older-freight",
+								CreationTimestamp: metav1.Time{Time: now.Add(-time.Hour)},
+							},
+							Origin: kargoapi.FreightOrigin{
+								Kind: kargoapi.FreightOriginKindWarehouse,
+								Name: "my-warehouse",
+							},
+						},
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:              "opted-out-freight",
+								CreationTimestamp: metav1.Time{Time: now},
+								Labels: map[string]string{
+									"kargo.maestra.io/auto-promotion": "disabled",
+								},
+							},
+							Origin: kargoapi.FreightOrigin{
+								Kind: kargoapi.FreightOriginKindWarehouse,
+								Name: "my-warehouse",
+							},
+						},
+					}, nil
+				},
+			},
+			req: admission.Request{
+				AdmissionRequest: admissionv1.AdmissionRequest{
+					Operation: admissionv1.Create,
+					UserInfo:  authnv1.UserInfo{Username: "real-user"},
+				},
+			},
+			promotion: &kargoapi.Promotion{
+				Spec: kargoapi.PromotionSpec{
+					Stage:   "fake-stage",
+					Freight: "opted-out-freight",
+					Steps:   []kargoapi.PromotionStep{{}},
+				},
+			},
+			assertions: func(t *testing.T, promo *kargoapi.Promotion, err error) {
+				require.NoError(t, err)
+				origin := &kargoapi.FreightOrigin{
+					Kind: kargoapi.FreightOriginKindWarehouse,
+					Name: "my-warehouse",
+				}
+				require.Equal(t, origin.String(), promo.Annotations[kargoapi.AnnotationKeyAutoPromotionHold])
+				require.NotContains(t, promo.Annotations, kargoapi.AnnotationKeyAutoPromotionResume)
 			},
 		},
 		{
