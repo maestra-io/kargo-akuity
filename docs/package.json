@@ -25,21 +25,21 @@
     "@docusaurus/preset-classic": "^3.10.2",
     "@docusaurus/theme-classic": "^3.10.2",
     "@mdx-js/react": "^3.1.1",
-    "@scalar/docusaurus": "^0.8.39",
+    "@scalar/docusaurus": "^0.8.52",
     "clsx": "^2.1.1",
-    "docusaurus-plugin-llms": "^0.6.0",
+    "docusaurus-plugin-llms": "^0.6.1",
     "docusaurus-plugin-sass": "^0.2.7",
     "prism-react-renderer": "^2.4.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-icons": "^5.7.0",
-    "sass": "^1.104.0"
+    "sass": "^1.106.1"
   },
   "devDependencies": {
     "@docusaurus/module-type-aliases": "^3.10.2",
     "@docusaurus/tsconfig": "3.10.2",
     "@docusaurus/types": "3.10.2",
-    "@types/node": "^26.5.0",
+    "@types/node": "^26.6.5",
     "@types/react": "^18.3.31",
     "typescript": "~5.9.3"
   },
