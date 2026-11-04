@@ -1,2 +1,6 @@
 allowBuilds:
   core-js: false
+
+# Same lift as ../../pnpm-workspace.yaml: tinypool 1.x has no fix.
+overrides:
+  tinypool@1.1.1: ^2.1.2
