@@ -3,15 +3,21 @@ ARG BASE_IMAGE=kargo-base
 ####################################################################################################
 # ui-builder
 ####################################################################################################
-FROM --platform=$BUILDPLATFORM docker.io/library/node:26.12.1 AS ui-builder
+FROM --platform=$BUILDPLATFORM packages.maestra.io/docker-hub/library/node:26.12.1@sha256:97fa0f1b59035c6072721a88d55be1371c7cb1cc942b521e1cc5c72ec87655f4 AS ui-builder
 
 ARG PNPM_VERSION=11.13.0
-RUN npm install --global pnpm@${PNPM_VERSION}
+# npm, pnpm and Go modules through nora (packages.maestra.io, 3-day hold,
+# maestra-io/issues-maestra#1649); the token lives on a tmpfs, never in a layer.
+RUN --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,required=true --mount=type=tmpfs,target=/npm-auth \
+    printf 'registry=https://packages.maestra.io/npm/\n//packages.maestra.io/npm/:_authToken=%s\n' "$(cat /run/secrets/PRIVATE_PACKAGES_TOKEN)" > /npm-auth/npmrc && \
+    NPM_CONFIG_USERCONFIG=/npm-auth/npmrc npm install --global pnpm@${PNPM_VERSION}
 
 WORKDIR /ui
 COPY ["ui/package.json", "ui/pnpm-lock.yaml", "ui/pnpm-workspace.yaml", "./"]
 
-RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,required=true --mount=type=tmpfs,target=/npm-auth \
+    printf 'registry=https://packages.maestra.io/npm/\n//packages.maestra.io/npm/:_authToken=%s\n' "$(cat /run/secrets/PRIVATE_PACKAGES_TOKEN)" > /npm-auth/npmrc && \
+    NPM_CONFIG_USERCONFIG=/npm-auth/npmrc pnpm install
 COPY ["ui/", "."]
 
 ARG VERSION
@@ -20,7 +26,7 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store NODE_ENV='production
 ####################################################################################################
 # back-end-builder
 ####################################################################################################
-FROM --platform=$BUILDPLATFORM golang:1.27.3-trixie AS back-end-builder
+FROM --platform=$BUILDPLATFORM packages.maestra.io/docker-hub/library/golang:1.27.3-trixie@sha256:af1bfc2614ebb1dbd31af514b78740fd678850e76498762b425ecee4c5c6ea80 AS back-end-builder
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -33,7 +39,10 @@ WORKDIR /kargo
 COPY ["api/go.mod", "api/go.sum", "api/"]
 COPY ["pkg/x/client/generated/go.mod", "pkg/x/client/generated/"]
 COPY ["go.mod", "go.sum", "./"]
-RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build go mod download
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,env=NORA_TOKEN,required=true \
+    GOPROXY="https://token:${NORA_TOKEN}@packages.maestra.io/go" go mod download
+# The builds below use only what go mod download fetched.
+ENV GOPROXY=off
 COPY api/ api/
 COPY pkg/ pkg/
 COPY cmd/ cmd/
@@ -85,7 +94,7 @@ WORKDIR /kargo/bin
 #
 # Source comes from the Go module proxy, so it is checksum-verified against
 # sum.golang.org rather than trusted from a tarball download.
-FROM --platform=$BUILDPLATFORM golang:1.27.3-trixie AS helm-builder
+FROM --platform=$BUILDPLATFORM packages.maestra.io/docker-hub/library/golang:1.27.3-trixie@sha256:af1bfc2614ebb1dbd31af514b78740fd678850e76498762b425ecee4c5c6ea80 AS helm-builder
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -94,8 +103,9 @@ ARG HELM_VERSION=v3.22.1
 
 WORKDIR /helm-build
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
-    go mod init helm-build && \
-    go get helm.sh/helm/v3/cmd/helm@${HELM_VERSION}
+    --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,env=NORA_TOKEN,required=true \
+    GOPROXY="https://token:${NORA_TOKEN}@packages.maestra.io/go" sh -c 'go mod init helm-build && go get "$0"' helm.sh/helm/v3/cmd/helm@${HELM_VERSION}
+ENV GOPROXY=off
 
 # Helm's own Makefile derives the Kubernetes version it reports to charts from
 # the k8s.io/client-go version it was built against, and injects it via ldflags.
@@ -127,7 +137,7 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
 # - supports development
 # - not used for official image builds
 ####################################################################################################
-FROM alpine:latest AS back-end-dev
+FROM packages.maestra.io/docker-hub/library/alpine:latest@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf AS back-end-dev
 
 RUN apk update && apk add ca-certificates git gpg gpg-agent openssh-client tini
 
@@ -150,7 +160,7 @@ CMD ["/usr/local/bin/kargo"]
 # - supports development
 # - not used for official image builds
 ####################################################################################################
-FROM --platform=$BUILDPLATFORM docker.io/library/node:26.12.1 AS ui-dev
+FROM --platform=$BUILDPLATFORM packages.maestra.io/docker-hub/library/node:26.12.1@sha256:97fa0f1b59035c6072721a88d55be1371c7cb1cc942b521e1cc5c72ec87655f4 AS ui-dev
 
 ARG PNPM_VERSION=11.13.0
 RUN npm install --global pnpm@${PNPM_VERSION}
