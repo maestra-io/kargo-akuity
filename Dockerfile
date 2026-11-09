@@ -105,7 +105,6 @@ WORKDIR /helm-build
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,env=NORA_TOKEN,required=true \
     GOPROXY="https://token:${NORA_TOKEN}@packages.maestra.io/go" sh -c 'go mod init helm-build && go get "$0"' helm.sh/helm/v3/cmd/helm@${HELM_VERSION}
-ENV GOPROXY=off
 
 # Helm's own Makefile derives the Kubernetes version it reports to charts from
 # the k8s.io/client-go version it was built against, and injects it via ldflags.
@@ -115,7 +114,10 @@ ENV GOPROXY=off
 # correct as HELM_VERSION moves.
 # -w drops DWARF. Keep the Go symbol table (no -s): without it govulncheck can't
 # tell which functions are linked and reports every vulnerable symbol as called.
+# go build fetches the module zips go get left out, through nora as well.
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,env=NORA_TOKEN,required=true \
+    export GOPROXY="https://token:${NORA_TOKEN}@packages.maestra.io/go" && \
     K8S_VERSION="$(go list -f '{{.Version}}' -m k8s.io/client-go)" && \
     K8S_VERSION_MAJOR="$(( $(echo "${K8S_VERSION}" | cut -d. -f1 | tr -d v) + 1 ))" && \
     K8S_VERSION_MINOR="$(echo "${K8S_VERSION}" | cut -d. -f2)" && \
