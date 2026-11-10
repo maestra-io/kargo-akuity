@@ -883,15 +883,20 @@ func (r *reconciler) ensureDefaultUserRoles(
 					Resources: []string{"events"},
 					Verbs:     []string{"get", "list", "watch"},
 				},
-				{ // For managing project-level access, credentials, and other config
+				// Maestra: read-only on config, ServiceAccounts and RBAC; no Secrets.
+				// Projects are managed declaratively (GitOps) with API secret
+				// management off, so no user flow needs these writes, and roles/
+				// rolebindings "*" (escalate, bind) is an RBAC escalation path
+				// (AVD-KSV-0050). Upstream grants "*" on all of these.
+				{ // For viewing project-level config and access
 					APIGroups: []string{""},
-					Resources: []string{"configmaps", "secrets", "serviceaccounts"},
-					Verbs:     []string{"*"},
+					Resources: []string{"configmaps", "serviceaccounts"},
+					Verbs:     []string{"get", "list", "watch"},
 				},
-				{ // For managing project-level access
+				{ // For viewing project-level access
 					APIGroups: []string{rbacv1.SchemeGroupVersion.Group},
 					Resources: []string{"rolebindings", "roles"},
-					Verbs:     []string{"*"},
+					Verbs:     []string{"get", "list", "watch"},
 				},
 				{ // Full access to all mutable Kargo resource types
 					// PromotionRequests are deliberately absent here: only the
