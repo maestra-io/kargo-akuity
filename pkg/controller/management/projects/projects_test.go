@@ -2744,6 +2744,27 @@ func TestReconciler_ensureDefaultUserRoles_PromotionRequestPermissions(t *testin
 			require.True(t, found, "no promotionrequests rule found")
 		})
 	}
+	// Maestra: the project kargo-admin Role is read-only on config,
+	// ServiceAccounts and RBAC, and has no Secrets access (AVD-KSV-0050).
+	t.Run("kargo-admin/read-only access and RBAC, no secrets", func(t *testing.T) {
+		role := createdRoles["kargo-admin"]
+		require.NotNil(t, role)
+		readOnly := []string{"get", "list", "watch"}
+		seen := map[string]bool{}
+		for _, rule := range role.Rules {
+			for _, res := range rule.Resources {
+				require.NotEqual(t, "secrets", res)
+				switch res {
+				case "configmaps", "serviceaccounts", "roles", "rolebindings":
+					require.ElementsMatch(t, readOnly, rule.Verbs, res)
+					seen[res] = true
+				}
+			}
+		}
+		for _, res := range []string{"configmaps", "serviceaccounts", "roles", "rolebindings"} {
+			require.True(t, seen[res], res+" rule not found")
+		}
+	})
 	// Regression test for GHSA-rx5g-3338-f2mf: patch on freights/status let a
 	// holder write status.verifiedIn directly, bypassing verification/soak
 	// requirements without ever needing the promote verb. Freight approval now
