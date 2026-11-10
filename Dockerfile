@@ -141,7 +141,9 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
 ####################################################################################################
 FROM packages.maestra.io/docker-hub/library/alpine:latest@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf AS back-end-dev
 
-RUN apk update && apk add ca-certificates git gpg gpg-agent openssh-client tini
+# apk through nora (packages.maestra.io, 3-day hold, maestra-io/issues-maestra#1649).
+RUN --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,required=true --mount=type=bind,from=public.ecr.aws/g5f9s8a4/nora-apk:1.0.0@sha256:55df38687c301e6fefa230dc1c71a8841618214cc549ade71be740b25822a00e,target=/nora-apk \
+    /nora-apk/nora-apk add --no-cache ca-certificates git gpg gpg-agent openssh-client tini
 
 # Match the published image: use the Helm binary we build ourselves (needed
 # by the kustomize-build step's Helm plugin) rather than a distro package.
@@ -165,11 +167,16 @@ CMD ["/usr/local/bin/kargo"]
 FROM --platform=$BUILDPLATFORM packages.maestra.io/docker-hub/library/node:26.12.1@sha256:97fa0f1b59035c6072721a88d55be1371c7cb1cc942b521e1cc5c72ec87655f4 AS ui-dev
 
 ARG PNPM_VERSION=11.13.0
-RUN npm install --global pnpm@${PNPM_VERSION}
+# npm and pnpm through nora, as in ui-builder.
+RUN --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,required=true --mount=type=tmpfs,target=/npm-auth \
+    printf 'registry=https://packages.maestra.io/npm/\n//packages.maestra.io/npm/:_authToken=%s\n' "$(cat /run/secrets/PRIVATE_PACKAGES_TOKEN)" > /npm-auth/npmrc && \
+    NPM_CONFIG_USERCONFIG=/npm-auth/npmrc npm install --global pnpm@${PNPM_VERSION}
 WORKDIR /ui
 COPY ["ui/package.json", "ui/pnpm-lock.yaml", "ui/pnpm-workspace.yaml", "./"]
 
-RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,required=true --mount=type=tmpfs,target=/npm-auth \
+    printf 'registry=https://packages.maestra.io/npm/\n//packages.maestra.io/npm/:_authToken=%s\n' "$(cat /run/secrets/PRIVATE_PACKAGES_TOKEN)" > /npm-auth/npmrc && \
+    NPM_CONFIG_USERCONFIG=/npm-auth/npmrc pnpm install
 
 COPY ["ui/", "."]
 
