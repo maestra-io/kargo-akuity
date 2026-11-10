@@ -50,6 +50,8 @@ docker_build(
     'bin/credential-helper'
   ],
   target = 'back-end-dev', # Just the back end, built natively, copied to the image
+  # apk / npm through nora (issues-maestra#1649): export a packages.maestra.io token first.
+  secret = ['id=PRIVATE_PACKAGES_TOKEN,env=PRIVATE_PACKAGES_TOKEN'],
 )
 
 docker_build(
@@ -57,6 +59,8 @@ docker_build(
   '.',
   only = ['ui/'],
   target = 'ui-dev', # Just the font end, served by vite, live updated
+  # apk / npm through nora (issues-maestra#1649): export a packages.maestra.io token first.
+  secret = ['id=PRIVATE_PACKAGES_TOKEN,env=PRIVATE_PACKAGES_TOKEN'],
   live_update = [sync('ui', '/ui')]
 )
 
