@@ -37,6 +37,18 @@ K3D_VERSION				?= v5.8.3
 JQ_VERSION				?= 1.8.1
 OPENAPI_GENERATOR_CLI_VERSION	?= 7.23.0
 
+# jq and openapi-generator-cli come through nora (packages.maestra.io, 3-day hold,
+# issues-maestra#1649): jq from its GitHub release proxy, the JAR from its Maven
+# proxy. NORA_TOKEN is a packages.maestra.io token (CI: the nora-session one).
+# Bumping a version means bumping its sha256 pins too.
+NORA_URL				?= https://packages.maestra.io
+JQ_SHA256_linux-amd64	:= 020468de7539ce70ef1bceaf7cde2e8c4f2ca6c3afb84642aabc5c97d9fc2a0d
+JQ_SHA256_linux-arm64	:= 6bc62f25981328edd3cfcfe6fe51b073f2d7e7710d7ef7fcdac28d4e384fc3d4
+JQ_SHA256_macos-amd64	:= e80dbe0d2a2597e3c11c404f03337b981d74b4a8504b70586c354b7697a7c27f
+JQ_SHA256_macos-arm64	:= a9fe3ea2f86dfc72f6728417521ec9067b343277152b114f4e98d8cb0e263603
+OPENAPI_GENERATOR_CLI_SHA256	:= cb087e40001e31eb08ef6140dd5de10938dbeb89016a1fe0481eaa25cd569026
+SHA256SUM				:= $(shell command -v sha256sum >/dev/null && echo sha256sum || echo shasum -a 256)
+
 ################################################################################
 # Tool targets                                                                 #
 ################################################################################
@@ -290,8 +302,9 @@ define install-jq
 	set -e ;\
 	echo "Installing jq $(2) to $(1)" ;\
 	mkdir -p $(dir $(1)) ;\
-	curl -fsSL -o $(1) https://github.com/jqlang/jq/releases/download/jq-$(2)/jq-$(JQ_OS)-$(JQ_ARCH) ;\
-	chmod 0755 $(1) ;\
+	$(call nora-download,$(NORA_URL)/github/jqlang/jq/releases/download/jq-$(2)/jq-$(JQ_OS)-$(JQ_ARCH),$(1).tmp,$(JQ_SHA256_$(JQ_OS)-$(JQ_ARCH))) ;\
+	chmod 0755 $(1).tmp ;\
+	mv $(1).tmp $(1) ;\
 	}
 endef
 
@@ -307,8 +320,24 @@ define install-openapi-generator-cli
 	set -e ;\
 	echo "Installing openapi-generator-cli $(2) to $(1)" ;\
 	mkdir -p $(dir $(1)) ;\
-	curl -fsSL -o $(1) https://repo1.maven.org/maven2/org/openapitools/openapi-generator-cli/$(2)/openapi-generator-cli-$(2).jar ;\
+	$(call nora-download,$(NORA_URL)/maven2/org/openapitools/openapi-generator-cli/$(2)/openapi-generator-cli-$(2).jar,$(1).tmp,$(OPENAPI_GENERATOR_CLI_SHA256)) ;\
+	mv $(1).tmp $(1) ;\
 	}
+endef
+
+# nora-download fetches a file from nora with NORA_TOKEN (handed to curl on
+# stdin, not in argv) and checks its sha256 pin; a missing pin (unlisted
+# platform) or a mismatch fails.
+#
+# $(1) URL
+# $(2) output path
+# $(3) sha256
+define nora-download
+	echo "Downloading $(1)" ;\
+	[ -n "$(3)" ] || { echo "no sha256 pin for $(1)" >&2; exit 1; } ;\
+	[ -n "$$NORA_TOKEN" ] || { echo "NORA_TOKEN (a packages.maestra.io token) is not set" >&2; exit 1; } ;\
+	printf 'user = "token:%s"\n' "$$NORA_TOKEN" | curl -fsSL -K - -o $(2) $(1) ;\
+	echo "$(3)  $(2)" | $(SHA256SUM) -c -
 endef
 
 # create-symlink creates a relative symlink to the platform-specific binary.
