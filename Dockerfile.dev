@@ -9,7 +9,7 @@ FROM packages.maestra.io/docker-hub/library/golang:1.27.3-trixie@sha256:af1bfc26
 ARG TARGETARCH
 
 ARG JAVA_MAJOR=21
-ARG PNPM_VERSION=11.13.0
+ARG PNPM_VERSION=11.13.1
 
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=node /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm

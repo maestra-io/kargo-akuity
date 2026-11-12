@@ -55,7 +55,7 @@
     "vitest": "4.1.11",
     "zx": "8.8.5"
   },
-  "packageManager": "pnpm@11.13.0",
+  "packageManager": "pnpm@11.13.1",
   "dependencies": {
     "@ant-design/v5-patch-for-react-19": "1.0.3",
     "@dagrejs/dagre": "1.1.8",
