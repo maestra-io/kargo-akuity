@@ -5,7 +5,7 @@ ARG BASE_IMAGE=kargo-base
 ####################################################################################################
 FROM --platform=$BUILDPLATFORM packages.maestra.io/docker-hub/library/node:26.12.1@sha256:97fa0f1b59035c6072721a88d55be1371c7cb1cc942b521e1cc5c72ec87655f4 AS ui-builder
 
-ARG PNPM_VERSION=11.13.0
+ARG PNPM_VERSION=11.13.1
 # npm, pnpm and Go modules through nora (packages.maestra.io, 3-day hold,
 # maestra-io/issues-maestra#1649); the token lives on a tmpfs, never in a layer.
 RUN --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,required=true --mount=type=tmpfs,target=/npm-auth \
@@ -166,7 +166,7 @@ CMD ["/usr/local/bin/kargo"]
 ####################################################################################################
 FROM --platform=$BUILDPLATFORM packages.maestra.io/docker-hub/library/node:26.12.1@sha256:97fa0f1b59035c6072721a88d55be1371c7cb1cc942b521e1cc5c72ec87655f4 AS ui-dev
 
-ARG PNPM_VERSION=11.13.0
+ARG PNPM_VERSION=11.13.1
 # npm and pnpm through nora, as in ui-builder.
 RUN --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,required=true --mount=type=tmpfs,target=/npm-auth \
     printf 'registry=https://packages.maestra.io/npm/\n//packages.maestra.io/npm/:_authToken=%s\n' "$(cat /run/secrets/PRIVATE_PACKAGES_TOKEN)" > /npm-auth/npmrc && \
