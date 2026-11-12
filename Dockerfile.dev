@@ -1,24 +1,28 @@
-FROM golang:1.27.3-trixie
+# Base images, apt and npm only through nora (packages.maestra.io, 3-day hold, issues-maestra#1649):
+# the PRIVATE_PACKAGES_TOKEN BuildKit secret is required (locally your nra_ token:
+# `docker build --secret id=PRIVATE_PACKAGES_TOKEN,env=PRIVATE_PACKAGES_TOKEN ...`). Node comes from
+# the official image (nora has no deb.nodesource.com upstream); git comes from the base's own trixie.
+FROM packages.maestra.io/docker-hub/library/node:22-trixie@sha256:c103d7b5aa3bf627c8b98db941d52556f04e0b5d9352b3d7b6391245d26620f8 AS node
+
+FROM packages.maestra.io/docker-hub/library/golang:1.27.3-trixie@sha256:af1bfc2614ebb1dbd31af514b78740fd678850e76498762b425ecee4c5c6ea80
 
 ARG TARGETARCH
 
 ARG JAVA_MAJOR=21
-ARG NODE_MAJOR=22
 ARG PNPM_VERSION=11.13.0
 
-RUN apt update && apt install -y ca-certificates curl gnupg unzip \
-    && mkdir -p /etc/apt/keyrings \
-    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
-    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list \
-    && apt-get update && apt-get install nodejs openjdk-${JAVA_MAJOR}-jre-headless -y \
-    && npm install --global pnpm@${PNPM_VERSION} \
-    # Install Git from "trixie" repository to get a more recent version than
-    # the one available in "stable". This can be removed once the version in
-    # "stable" is updated to >= 2.42.0 (which supports `--orphan` for `git
-    # worktree add`).
-    && echo "deb http://deb.debian.org/debian trixie main" > /etc/apt/sources.list.d/trixie.list \
-    && apt update \
-    && apt install -y -t trixie git \
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
+COPY --from=node /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+
+RUN --mount=type=secret,id=PRIVATE_PACKAGES_TOKEN,required=true \
+    --mount=type=bind,from=public.ecr.aws/g5f9s8a4/nora-apt:1.0.0@sha256:cd5fcec38f8b7c4fdd283d41f49ac656751d4deed168111f89f44976a43a8178,target=/nora-apt,rw \
+    --mount=type=tmpfs,target=/npm-auth \
+    . /nora-apt/env.sh && apt-get update \
+    && apt-get install -y ca-certificates curl gnupg unzip git openjdk-${JAVA_MAJOR}-jre-headless \
+    && printf 'registry=https://packages.maestra.io/npm/\n//packages.maestra.io/npm/:_authToken=%s\n' "$(cat /run/secrets/PRIVATE_PACKAGES_TOKEN)" > /npm-auth/npmrc \
+    && NPM_CONFIG_USERCONFIG=/npm-auth/npmrc npm install --global pnpm@${PNPM_VERSION} \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
