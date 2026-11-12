@@ -201,6 +201,9 @@ jobs:
 
   build-ui:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # GitHub OIDC token for nora (packages.maestra.io)
     steps:
     - name: Harden the runner (Audit all outbound calls)
       uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
@@ -219,12 +222,21 @@ jobs:
         node-version: "24.15.0"
         cache: "pnpm"
         cache-dependency-path: "**/pnpm-lock.yaml"
+    # npm packages through nora (packages.maestra.io, 3-day hold, issues-maestra#1649): registry and
+    # token in a step-only userconfig, which pnpm reads like npm (same as ci.yaml check-codegen).
+    - name: nora session token
+      id: nora
+      uses: maestra-io/github-actions/nora-session@b23cf64c53b689f5ae98b08bac884cf1ffc1b3c1 # v1.78.1
     - name: Build UI
       env:
         VERSION: ${{ github.event.release.tag_name || github.ref_name }}
+        NORA_TOKEN: ${{ steps.nora.outputs.token }}
       working-directory: ./ui
       run: |
-        pnpm install
+        # pnpm expands ${NORA_TOKEN} at run time; the token is never written to disk.
+        # shellcheck disable=SC2016
+        printf '%s\n' 'registry=https://packages.maestra.io/npm/' '//packages.maestra.io/npm/:_authToken=${NORA_TOKEN}' > "$RUNNER_TEMP/nora.npmrc"
+        NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/nora.npmrc" pnpm install
         NODE_ENV=production pnpm run build
     - name: Upload UI artifact
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
