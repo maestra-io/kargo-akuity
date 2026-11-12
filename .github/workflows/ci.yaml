@@ -166,6 +166,9 @@ jobs:
 
   check-codegen:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # GitHub OIDC token for nora (packages.maestra.io)
     steps:
     - name: Harden the runner (Audit all outbound calls)
       uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
@@ -192,8 +195,19 @@ jobs:
         node-version: "24.15.0"
         cache: "pnpm"
         cache-dependency-path: "**/pnpm-lock.yaml"
+    # npm packages through nora (packages.maestra.io, 3-day hold, issues-maestra#1649): registry and
+    # token in a step-only userconfig, which pnpm reads like npm.
+    - name: nora session token
+      id: nora
+      uses: maestra-io/github-actions/nora-session@b23cf64c53b689f5ae98b08bac884cf1ffc1b3c1 # v1.78.1
     - name: Install nodejs dependencies
-      run: pnpm install --dev
+      env:
+        NORA_TOKEN: ${{ steps.nora.outputs.token }}
+      run: |
+        # pnpm expands ${NORA_TOKEN} at run time; the token is never written to disk.
+        # shellcheck disable=SC2016
+        printf '%s\n' 'registry=https://packages.maestra.io/npm/' '//packages.maestra.io/npm/:_authToken=${NORA_TOKEN}' > "$RUNNER_TEMP/nora.npmrc"
+        NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/nora.npmrc" pnpm install --dev
       working-directory: ./ui
     - name: Cache tools
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
