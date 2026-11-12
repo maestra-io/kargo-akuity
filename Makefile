@@ -339,6 +339,7 @@ endif
 .PHONY: hack-build-dev-tools
 hack-build-dev-tools:
 	$(CONTAINER_RUNTIME) build $(DEV_TOOLS_BUILD_OPTS) \
+		--secret id=PRIVATE_PACKAGES_TOKEN,env=PRIVATE_PACKAGES_TOKEN \
 		-f Dockerfile.dev -t kargo:dev-tools .
 
 .PHONY: hack-lint
