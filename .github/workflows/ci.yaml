@@ -42,6 +42,9 @@ jobs:
   
   lint-and-typecheck-ui:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # GitHub OIDC token for nora (packages.maestra.io)
     steps:
     - name: Harden the runner (Audit all outbound calls)
       uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
@@ -50,27 +53,48 @@ jobs:
 
     - name: Checkout code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: ~/.pnpm-store
-        key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
-        restore-keys: |
-          ${{ runner.os }}-pnpm-
-    - name: Install pnpm
-      uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-      with:
-        package_json_file: ui/package.json
     - name: Install nodejs
       uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
         node-version: "24.15.0"
-        cache: "pnpm"
-        cache-dependency-path: "**/pnpm-lock.yaml"
+    # pnpm itself and npm packages through nora (packages.maestra.io, 3-day hold,
+    # issues-maestra#1649): registry and token in a step-only userconfig, which pnpm reads
+    # like npm. pnpm comes from nora with npm, at the version ui/package.json pins.
+    - name: nora session token
+      id: nora
+      uses: maestra-io/github-actions/nora-session@b23cf64c53b689f5ae98b08bac884cf1ffc1b3c1 # v1.78.1
+    - name: Install pnpm
+      id: pnpm
+      env:
+        NORA_TOKEN: ${{ steps.nora.outputs.token }}
+        NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/nora.npmrc
+      run: |
+        # npm and pnpm expand ${NORA_TOKEN} at run time; the token is never written to disk.
+        # shellcheck disable=SC2016
+        printf '%s\n' 'registry=https://packages.maestra.io/npm/' '//packages.maestra.io/npm/:_authToken=${NORA_TOKEN}' > "$NPM_CONFIG_USERCONFIG"
+        npm install --global "$(jq -r .packageManager ui/package.json)"
+        echo "store=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+    - name: Cache pnpm store
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.pnpm.outputs.store }}
+        key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-pnpm-
     - name: Run typecheck
+      env:
+        NORA_TOKEN: ${{ steps.nora.outputs.token }}
+        NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/nora.npmrc
       run: make typecheck-ui
     - name: Run linter
+      env:
+        NORA_TOKEN: ${{ steps.nora.outputs.token }}
+        NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/nora.npmrc
       run: make lint-ui
     - name: Run unit tests
+      env:
+        NORA_TOKEN: ${{ steps.nora.outputs.token }}
+        NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/nora.npmrc
       run: make test-unit-ui
 
   lint-go:
@@ -185,29 +209,39 @@ jobs:
         distribution: temurin
         java-version: "21"
         java-package: jre
-    - name: Install pnpm
-      uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-      with:
-        package_json_file: ui/package.json
     - name: Install nodejs
       uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
         node-version: "24.15.0"
-        cache: "pnpm"
-        cache-dependency-path: "**/pnpm-lock.yaml"
-    # npm packages through nora (packages.maestra.io, 3-day hold, issues-maestra#1649): registry and
-    # token in a step-only userconfig, which pnpm reads like npm.
+    # pnpm itself and npm packages through nora (packages.maestra.io, 3-day hold,
+    # issues-maestra#1649): registry and token in a step-only userconfig, which pnpm reads
+    # like npm. pnpm comes from nora with npm, at the version ui/package.json pins.
     - name: nora session token
       id: nora
       uses: maestra-io/github-actions/nora-session@b23cf64c53b689f5ae98b08bac884cf1ffc1b3c1 # v1.78.1
+    - name: Install pnpm
+      id: pnpm
+      env:
+        NORA_TOKEN: ${{ steps.nora.outputs.token }}
+        NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/nora.npmrc
+      run: |
+        # npm and pnpm expand ${NORA_TOKEN} at run time; the token is never written to disk.
+        # shellcheck disable=SC2016
+        printf '%s\n' 'registry=https://packages.maestra.io/npm/' '//packages.maestra.io/npm/:_authToken=${NORA_TOKEN}' > "$NPM_CONFIG_USERCONFIG"
+        npm install --global "$(jq -r .packageManager ui/package.json)"
+        echo "store=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+    - name: Cache pnpm store
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.pnpm.outputs.store }}
+        key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-pnpm-
     - name: Install nodejs dependencies
       env:
         NORA_TOKEN: ${{ steps.nora.outputs.token }}
-      run: |
-        # pnpm expands ${NORA_TOKEN} at run time; the token is never written to disk.
-        # shellcheck disable=SC2016
-        printf '%s\n' 'registry=https://packages.maestra.io/npm/' '//packages.maestra.io/npm/:_authToken=${NORA_TOKEN}' > "$RUNNER_TEMP/nora.npmrc"
-        NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/nora.npmrc" pnpm install --dev
+        NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/nora.npmrc
+      run: pnpm install --dev
       working-directory: ./ui
     - name: Cache tools
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -217,6 +251,10 @@ jobs:
           hack/include
         key: ${{ runner.os }}-tools-${{ hashFiles('hack/tools.mk') }}
     - name: Run Codegen
+      # make codegen runs npm install -g and pnpm install for ui/ and docs/: through nora too.
+      env:
+        NORA_TOKEN: ${{ steps.nora.outputs.token }}
+        NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/nora.npmrc
       run: make codegen
     - name: Check nothing has changed
       run: git diff --exit-code -- .
