@@ -19,7 +19,8 @@ CONTAINER_RUNTIME ?= docker
 IMAGE_REPO 			?= kargo
 LOCAL_REG_PORT			?= 5001
 BASE_IMAGE 			?= localhost:$(LOCAL_REG_PORT)/$(IMAGE_REPO)-base
-APKO_IMAGE 			?= cgr.dev/chainguard/apko
+# Maestra: through nora (3-day quarantine, issues-maestra#1649); digest of cgr.dev/chainguard/apko:latest
+APKO_IMAGE 			?= packages.maestra.io/cgr/chainguard/apko@sha256:4adeae1b18261171fca695c97accfe96d33bcbce55325315d3fbb3ffe440ad37
 IMAGE_TAG 			?= dev
 IMAGE_PUSH 			?= false
 IMAGE_PLATFORMS 	?=
