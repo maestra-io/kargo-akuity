@@ -1,0 +1,18 @@
+# Upstream lines only (identical on the upstream default branch, or written by an upstream
+# commit): upstream test fixtures / docs / vendored code, not our credentials. issues-maestra#1649
+Tiltfile:generic-api-key:39
+docs/docs/40-operator-guide/35-cluster-configuration.md:generic-api-key:162
+docs/docs/40-operator-guide/35-cluster-configuration.md:generic-api-key:173
+docs/docs/40-operator-guide/40-security/35-api-tokens.md:generic-api-key:49
+docs/docs/50-user-guide/20-how-to-guides/30-working-with-warehouses.md:generic-api-key:1132
+docs/docs/50-user-guide/20-how-to-guides/30-working-with-warehouses.md:generic-api-key:1143
+docs/docs/50-user-guide/50-security/25-api-tokens.md:generic-api-key:48
+docs/docusaurus.config.js:generic-api-key:282
+hack/tilt/gpg-secret.yaml:private-key:9
+pkg/credentials/ecr/access_key_test.go:generic-api-key:161
+pkg/credentials/ecr/access_key_test.go:generic-api-key:329
+pkg/credentials/ecr/access_key_test.go:generic-api-key:347
+pkg/credentials/ecr/managed_identity_test.go:generic-api-key:112
+pkg/promotion/runner/builtin/github_push_integration_test.go:private-key:35
+pkg/yaml/yaml_test.go:generic-api-key:120
+pkg/yaml/yaml_test.go:generic-api-key:92
