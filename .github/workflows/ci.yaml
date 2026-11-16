@@ -292,16 +292,18 @@ jobs:
     permissions:
       contents: read
       id-token: write # GitHub OIDC token for nora (packages.maestra.io)
-    services:
-      registry:
-        image: registry:3.0.0
-        ports:
-        - 5000:5000
     steps:
     - name: Harden the runner (Audit all outbound calls)
       uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
       with:
         egress-policy: audit
+
+    # The job-local registry, from nora (issues-maestra#1649): a `services:` image is pulled
+    # before any step, from Docker Hub with no nora credential.
+    - uses: maestra-io/github-actions/nora-service@e023f80c6b88bd11369d31f5978d986f82053ef4 # v1.89.0
+      with:
+        image: packages.maestra.io/docker-hub/library/registry:3.0.0@sha256:6c5666b861f3505b116bb9aa9b25175e71210414bd010d92035ff64018f9457e
+        ports: 5000:5000
 
     # BuildKit pulls the base images through nora (packages.maestra.io, issues-maestra#1649)
     # with ~/.docker/config.json. nora takes the GitHub OIDC token, which lives minutes: a
