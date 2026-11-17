@@ -4,7 +4,7 @@
 # the official image (nora has no deb.nodesource.com upstream); git comes from the base's own trixie.
 FROM packages.maestra.io/docker-hub/library/node:22-trixie@sha256:c103d7b5aa3bf627c8b98db941d52556f04e0b5d9352b3d7b6391245d26620f8 AS node
 
-FROM packages.maestra.io/docker-hub/library/golang:1.27.3-trixie@sha256:af1bfc2614ebb1dbd31af514b78740fd678850e76498762b425ecee4c5c6ea80
+FROM packages.maestra.io/docker-hub/library/golang:1.27.4-trixie@sha256:f18c3d73a184fb0582828510722e723b63a93f7188d11dd223d9be6f6880e65d
 
 ARG TARGETARCH
 

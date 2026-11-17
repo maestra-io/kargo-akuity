@@ -26,7 +26,7 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store NODE_ENV='production
 ####################################################################################################
 # back-end-builder
 ####################################################################################################
-FROM --platform=$BUILDPLATFORM packages.maestra.io/docker-hub/library/golang:1.27.3-trixie@sha256:af1bfc2614ebb1dbd31af514b78740fd678850e76498762b425ecee4c5c6ea80 AS back-end-builder
+FROM --platform=$BUILDPLATFORM packages.maestra.io/docker-hub/library/golang:1.27.4-trixie@sha256:f18c3d73a184fb0582828510722e723b63a93f7188d11dd223d9be6f6880e65d AS back-end-builder
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -94,7 +94,7 @@ WORKDIR /kargo/bin
 #
 # Source comes from the Go module proxy, so it is checksum-verified against
 # sum.golang.org rather than trusted from a tarball download.
-FROM --platform=$BUILDPLATFORM packages.maestra.io/docker-hub/library/golang:1.27.3-trixie@sha256:af1bfc2614ebb1dbd31af514b78740fd678850e76498762b425ecee4c5c6ea80 AS helm-builder
+FROM --platform=$BUILDPLATFORM packages.maestra.io/docker-hub/library/golang:1.27.4-trixie@sha256:f18c3d73a184fb0582828510722e723b63a93f7188d11dd223d9be6f6880e65d AS helm-builder
 
 ARG TARGETOS
 ARG TARGETARCH
