@@ -185,6 +185,7 @@ build-base-image:
 	cp kargo-base.apko.yaml build
 	$(CONTAINER_RUNTIME) run \
 		--rm \
+		-e HTTP_AUTH \
 		-v $(dir $(realpath $(firstword $(MAKEFILE_LIST))))build:/build \
 		-w /build \
 		$(APKO_IMAGE) \
