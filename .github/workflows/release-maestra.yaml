@@ -136,10 +136,17 @@ jobs:
         with:
           driver-opts: network=host
 
+      # apko fetches the Wolfi packages through nora (packages.maestra.io/apk/wolfi, 3-day
+      # hold, issues-maestra#1649) with HTTP_AUTH, a 1 h nora session token.
+      - name: nora session token
+        id: nora-apk
+        uses: maestra-io/github-actions/nora-session@b23cf64c53b689f5ae98b08bac884cf1ffc1b3c1 # v1.78.1
       - name: Build base image
         # Upstream's release flow: build kargo-base via apko, push to a
         # localhost registry, then have the main Dockerfile consume it via
         # --build-arg BASE_IMAGE. See akuity/kargo .github/workflows/release.yaml.
+        env:
+          HTTP_AUTH: basic:packages.maestra.io:token:${{ steps.nora-apk.outputs.token }}
         run: |
           BASE_IMAGE=localhost:5000/kargo-base make build-base-image
           docker push localhost:5000/kargo-base:latest-amd64
