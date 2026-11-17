@@ -1,8 +1,11 @@
 contents:
+  # Maestra: Wolfi through nora (3-day hold, issues-maestra#1649). nora verifies
+  # Wolfi's signature and re-signs the filtered index with its own key; the job
+  # passes HTTP_AUTH (Makefile build-base-image).
   keyring:
-  - https://packages.wolfi.dev/os/wolfi-signing.rsa.pub
+  - https://packages.maestra.io/apk/keys/packages.maestra.io.rsa.pub
   repositories:
-  - https://packages.wolfi.dev/os
+  - https://packages.maestra.io/apk/wolfi
   packages:
   - busybox # TODO: Remove this if we can figure out how to get by without a shell
   - ca-certificates
