@@ -250,6 +250,7 @@ jobs:
     needs: [build-ui]
     if: github.event_name == 'release'
     permissions:
+      id-token: write # setup-*-nora: the toolchain from nora
       contents: write
     runs-on: ubuntu-latest
     strategy:
