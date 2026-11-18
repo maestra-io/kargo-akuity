@@ -12,6 +12,6 @@ runs:
   # setup-go caches GOMODCACHE and GOCACHE by default, keyed on a hash of
   # every go.sum in the repository.
   - name: Set up Go
-    uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+    uses: maestra-io/github-actions/setup-go-nora@f40b5191253ae7e28c10836989a77255666141e4 # v1.104.0
     with:
       go-version: ${{ inputs.go-version }}

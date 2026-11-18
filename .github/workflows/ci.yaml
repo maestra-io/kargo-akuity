@@ -16,6 +16,9 @@ permissions:
 jobs:
   test-unit:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # setup-*-nora: the toolchain from nora
     steps:
     - name: Harden the runner (Audit all outbound calls)
       uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
@@ -54,7 +57,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
     - name: Install nodejs
-      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      uses: maestra-io/github-actions/setup-node-nora@f40b5191253ae7e28c10836989a77255666141e4 # v1.104.0
       with:
         node-version: "24.15.0"
     # pnpm itself and npm packages through nora (packages.maestra.io, 3-day hold,
@@ -99,6 +102,7 @@ jobs:
 
   lint-go:
     permissions:
+      id-token: write # setup-*-nora: the toolchain from nora
       contents: read # Permissions to read the repository, required because we override the default permissions
       checks: write # Used to create checks (linting comments) on PRs
     runs-on: ubuntu-latest
@@ -210,7 +214,7 @@ jobs:
         java-version: "21"
         java-package: jre
     - name: Install nodejs
-      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      uses: maestra-io/github-actions/setup-node-nora@f40b5191253ae7e28c10836989a77255666141e4 # v1.104.0
       with:
         node-version: "24.15.0"
     # pnpm itself and npm packages through nora (packages.maestra.io, 3-day hold,
@@ -377,6 +381,9 @@ jobs:
   build-cli:
     needs: [test-unit, lint-go, lint-charts, lint-and-typecheck-ui, check-codegen]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # setup-*-nora: the toolchain from nora
     steps:
     - name: Harden the runner (Audit all outbound calls)
       uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
