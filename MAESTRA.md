@@ -16,3 +16,4 @@ a new upstream tag, re-apply every patch and keep its test.
 | UI: Maestra mascot instead of the Kargo logo (#6) | `ui/` | Branding |
 | CI: Maestra ECR release, RunsOn, amd64 only, pinned actions, cosign + SBOM, nora pull-through (#12, #17, #18, #20, #22) | `.github/workflows/`, `Dockerfile` | Build and supply chain |
 | Base image: apko through nora, Wolfi packages from `packages.maestra.io/apk/wolfi` (nora key, `HTTP_AUTH` session token) | `kargo-base.apko.yaml`, `Makefile` (`build-base-image`), `.github/workflows/ci.yaml`, `release-maestra.yaml` | 3-day hold on Wolfi packages, issues-maestra#1649 |
+| Release also publishes the fork's chart: `oci://<ECR>/helm-charts/kargo`, version `X.Y.Z-maestra.N`, appVersion = the tag | `.github/workflows/release-maestra.yaml` (`Publish chart`) | Clusters install our chart, not akuity's ghcr one that nora quarantines 3 days after each upstream release (kargo 1.12.6), issues-maestra#1649 |
