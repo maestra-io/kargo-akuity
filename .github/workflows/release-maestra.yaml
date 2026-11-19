@@ -1,8 +1,12 @@
 name: Release (Maestra)
 
 # Builds the Kargo container image with Maestra patches on top of an upstream
-# tag and publishes it to the Maestra ECR. Triggered by pushing a tag of the
-# form vX.Y.Z-maestra.N (matching the upstream tag the patches sit atop).
+# tag and publishes it, and the fork's chart (charts/kargo), to the Maestra ECR.
+# Triggered by pushing a tag of the form vX.Y.Z-maestra.N (matching the upstream
+# tag the patches sit atop). The chart is oci://<ECR>/helm-charts/kargo, version
+# X.Y.Z-maestra.N, appVersion = the tag: clusters install our chart with our image
+# instead of akuity's ghcr chart, which nora's quarantine holds for 3 days after
+# every upstream release (kargo 1.12.6, issues-maestra#1649).
 #
 # Pushes to the us-west-2 registry: eu-central-1 was decommissioned on
 # 2026-09-08 (maestra-io/issues-maestra#1354, phase 7) and writes there are
@@ -202,3 +206,26 @@ jobs:
         with:
           image: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPO }}
           digest: ${{ steps.push.outputs.digest }}
+
+      - name: Set up Helm
+        uses: maestra-io/github-actions/setup-helm-nora@2cada920a3bda362dad0b997e1eb3c61e0b855f0 # v1.106.4
+
+      # The fork's own chart, packaged as upstream's release.yaml does, next to the
+      # image. A fresh JWT: the one from the signing step may be past its 5 minutes.
+      - name: Publish chart
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          tbot start -c /tmp/tbot.yaml
+          export AWS_WEB_IDENTITY_TOKEN_FILE=/tmp/tbot-output/jwt_svid
+          export AWS_ROLE_ARN="${AWS_ROLE_ARN}"
+          export AWS_DEFAULT_REGION="${AWS_REGION}"
+          aws ecr describe-repositories --repository-names helm-charts/kargo --region "${AWS_REGION}" >/dev/null 2>&1 || \
+            aws ecr create-repository --repository-name helm-charts/kargo --region "${AWS_REGION}"
+          aws ecr get-login-password --region "${AWS_REGION}" | \
+            helm registry login "${ECR_REGISTRY}" --username AWS --password-stdin
+          CHART_VERSION="${VERSION#v}"
+          cd charts/kargo
+          helm dep up
+          helm package . --version "${CHART_VERSION}" --app-version "${VERSION}"
+          helm push "kargo-${CHART_VERSION}.tgz" "oci://${ECR_REGISTRY}/helm-charts"
