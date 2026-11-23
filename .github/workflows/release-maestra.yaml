@@ -90,7 +90,7 @@ jobs:
           tbot start -c /tmp/tbot.yaml || true
           test -f /tmp/tbot-output/jwt_svid
 
-          pip install -q awscli
+          # aws is on the runner image; nothing is installed from PyPI here (issues-maestra#1649)
           export AWS_WEB_IDENTITY_TOKEN_FILE=/tmp/tbot-output/jwt_svid
           export AWS_ROLE_ARN="${AWS_ROLE_ARN}"
           export AWS_DEFAULT_REGION="${AWS_REGION}"
