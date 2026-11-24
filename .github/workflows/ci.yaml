@@ -116,21 +116,27 @@ jobs:
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
     - name: Set up Go
       uses: ./.github/actions/setup-go
-    - name: Cache golangci-lint
-      id: cache-golangci-lint
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+    # GitHub Releases through nora (packages.maestra.io): 3-day hold, issues-maestra#1649.
+    # Bump the version and the sha256 (the release's asset digest) together.
+    - name: golangci-lint through nora
+      uses: maestra-io/github-actions/nora-asset@bce883a9462ae1a0ec95b02ac797f223589ef7a5 # v1.115.0
       with:
-        path: |
-          hack/bin/golangci-lint
-          hack/bin/golangci-lint-*
-        key: ${{ runner.os }}-golangci-lint-${{ hashFiles('hack/tools.mk') }}
-    - name: Install golangci-lint
-      if: steps.cache-golangci-lint.outputs.cache-hit != 'true'
-      run: make install-golangci-lint
+        path: github/golangci/golangci-lint/releases/download/v2.14.0/golangci-lint-2.14.0-linux-amd64.tar.gz
+        sha256: ab90aeb7b066f92a33415b638a50fe5344bbb75a0d32ad30cc248d88f81032ab
+        bin: golangci-lint
+        member: golangci-lint-2.14.0-linux-amd64/golangci-lint
+    # Where hack/tools.mk keeps it, so make downloads nothing (its installer is curl | sh).
+    - name: Place golangci-lint
+      run: |
+        grep -qE '^GOLANGCI_LINT_VERSION\s*\?= v2\.14\.0$' hack/tools.mk
+        install -Dm755 "$(command -v golangci-lint)" "hack/bin/golangci-lint-linux-$(uname -m)-v2.14.0"
     - name: Run linter
       run: make lint-go
 
   lint-charts:
+    permissions:
+      contents: read
+      id-token: write # helm from nora
     runs-on: ubuntu-latest
     steps:
     - name: Harden the runner (Audit all outbound calls)
@@ -140,22 +146,26 @@ jobs:
 
     - name: Checkout code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-    - name: Cache helm
-      id: cache-helm
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+    # helm through nora (the version go.mod pins), where hack/tools.mk keeps it, so make downloads
+    # nothing (its installer is curl | sh).
+    - name: helm version
+      id: helm
+      run: echo "version=$(grep -m1 -E '^[[:space:]]+helm.sh/helm/v3 v' go.mod | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+    - name: Set up helm
+      uses: maestra-io/github-actions/setup-helm-nora@f40b5191253ae7e28c10836989a77255666141e4 # v1.104.0
       with:
-        path: |
-          hack/bin/helm
-          hack/bin/helm-*
-        key:
-          ${{ runner.os }}-helm-${{ hashFiles('go.mod', 'hack/tools.mk') }}
-    - name: Install helm
-      if: steps.cache-helm.outputs.cache-hit != 'true'
-      run: make install-helm
+        version: ${{ steps.helm.outputs.version }}
+    - name: Place helm
+      env:
+        HELM_VERSION: ${{ steps.helm.outputs.version }}
+      run: install -Dm755 "$(command -v helm)" "hack/bin/helm-linux-$(uname -m)-$HELM_VERSION"
     - name: Run linter
       run: make lint-charts
 
   test-chart:
+    permissions:
+      contents: read
+      id-token: write # helm from nora
     runs-on: ubuntu-latest
     steps:
     - name: Harden the runner (Audit all outbound calls)
@@ -165,18 +175,33 @@ jobs:
 
     - name: Checkout code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-    - name: Cache helm
-      id: cache-helm
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+    # helm through nora (the version go.mod pins), where hack/tools.mk keeps it, so make downloads
+    # nothing (its installer is curl | sh).
+    - name: helm version
+      id: helm
+      run: echo "version=$(grep -m1 -E '^[[:space:]]+helm.sh/helm/v3 v' go.mod | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+    - name: Set up helm
+      uses: maestra-io/github-actions/setup-helm-nora@f40b5191253ae7e28c10836989a77255666141e4 # v1.104.0
       with:
-        path: |
-          hack/bin/helm
-          hack/bin/helm-*
-        key:
-          ${{ runner.os }}-helm-${{ hashFiles('go.mod', 'hack/tools.mk') }}
-    - name: Install helm
-      if: steps.cache-helm.outputs.cache-hit != 'true'
-      run: make install-helm
+        version: ${{ steps.helm.outputs.version }}
+    - name: Place helm
+      env:
+        HELM_VERSION: ${{ steps.helm.outputs.version }}
+      run: install -Dm755 "$(command -v helm)" "hack/bin/helm-linux-$(uname -m)-$HELM_VERSION"
+    # The release archive is the plugin: `helm plugin install` would run its hook, which downloads
+    # the binary from GitHub again. make installs it only when `helm plugin list` misses it.
+    - name: helm-unittest through nora
+      id: untt
+      uses: maestra-io/github-actions/nora-asset@bce883a9462ae1a0ec95b02ac797f223589ef7a5 # v1.115.0
+      with:
+        path: github/helm-unittest/helm-unittest/releases/download/v1.1.0/helm-unittest-linux-amd64-1.1.0.tgz
+        sha256: 3a8adc16a6d56cb2176b3668b4c4a3ec55130a8a8a52ae78804fd9b12ddf3418
+    - name: Place helm-unittest
+      env:
+        UNTT: ${{ steps.untt.outputs.file }}
+      run: |
+        grep -qE '^HELM_UNITTEST_VERSION \?= v1\.1\.0$' Makefile
+        d="$(helm env HELM_PLUGINS)/helm-unittest"; mkdir -p "$d"; tar -xzf "$UNTT" -C "$d"
     - name: Run chart unit tests
       run: |
         set -o pipefail
@@ -207,12 +232,11 @@ jobs:
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
     - name: Set up Go
       uses: ./.github/actions/setup-go
-    - name: Install java
-      uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
-      with:
-        distribution: temurin
-        java-version: "21"
-        java-package: jre
+    # The runner image's Temurin 21 (setup-java downloads a JRE from GitHub Releases).
+    - name: Java 21 of the runner image
+      run: |
+        "$JAVA_HOME_21_X64/bin/java" -version
+        echo "$JAVA_HOME_21_X64/bin" >> "$GITHUB_PATH"
     - name: Install nodejs
       uses: maestra-io/github-actions/setup-node-nora@f40b5191253ae7e28c10836989a77255666141e4 # v1.104.0
       with:
@@ -360,18 +384,27 @@ jobs:
         push: true
         cache-from: type=gha
         cache-to: type=gha,mode=max
-    - name: Install Grype
-      id: grype
-      uses: anchore/scan-action/download-grype@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+    # GitHub Releases through nora (packages.maestra.io): 3-day hold, issues-maestra#1649.
+    # Bump the version and the sha256 (the release's asset digest) together.
+    - name: grype through nora
+      uses: maestra-io/github-actions/nora-asset@bce883a9462ae1a0ec95b02ac797f223589ef7a5 # v1.115.0
       with:
-        cache-db: true
+        path: github/anchore/grype/releases/download/v0.118.0/grype_0.118.0_linux_amd64.tar.gz
+        sha256: 1d444c5e7360471815f7158f71935fcecc68a3c417d85c7344f770854300bba2
+        bin: grype
+        member: grype
     # cve-scan.sh re-stamps the VEX product @id to the scanned digest, which it
     # resolves from the job-local registry tag via crane.
-    - name: Install Crane
-      uses: imjasonh/setup-crane@feee3b6bb0d4c68370f256a4502498c9227e5c6b # v0.7
+    - name: crane through nora
+      uses: maestra-io/github-actions/nora-asset@bce883a9462ae1a0ec95b02ac797f223589ef7a5 # v1.115.0
+      with:
+        path: github/google/go-containerregistry/releases/download/v0.22.1/go-containerregistry_Linux_x86_64.tar.gz
+        sha256: 0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0
+        bin: crane
+        member: crane
     - name: Scan image for CVEs
       env:
-        GRYPE_CMD: ${{ steps.grype.outputs.cmd }}
+        GRYPE_CMD: grype
         GRYPE_REGISTRY_INSECURE_USE_HTTP: "true" # job-local registry service
         CRANE_INSECURE: "true" # job-local registry is plain HTTP
         VEX_IMAGE: kargo-oss # monitored image name for the VEX lookup
